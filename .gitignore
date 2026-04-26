@@ -1,0 +1,9 @@
+.claude/
+PLAN.md
+.DS_Store
+todoPlayground
+*.db
+*.sqlite
+*.sqlite3
+coverage.out
+*.test

@@ -8,12 +8,8 @@ import (
 	"testing"
 )
 
-func resetState(t *testing.T) {
-	t.Helper()
-	mu.Lock()
-	defer mu.Unlock()
-	nextID = 1
-	todos = nil
+func newTestMux() http.Handler {
+	return newMux(newMemoryStore())
 }
 
 func postForm(t *testing.T, mux http.Handler, path string, values url.Values) *httptest.ResponseRecorder {
@@ -55,8 +51,7 @@ func requireNotContains(t *testing.T, body, want string) {
 }
 
 func TestAddRendersTodoAndResetsForm(t *testing.T) {
-	resetState(t)
-	mux := newMux()
+	mux := newTestMux()
 
 	rec := postForm(t, mux, "/add", url.Values{"text": {"Buy milk"}})
 	requireStatus(t, rec, http.StatusOK)
@@ -74,8 +69,7 @@ func TestAddRendersTodoAndResetsForm(t *testing.T) {
 }
 
 func TestTodoLifecycle(t *testing.T) {
-	resetState(t)
-	mux := newMux()
+	mux := newTestMux()
 
 	rec := postForm(t, mux, "/add", url.Values{"text": {"Draft plan"}})
 	requireStatus(t, rec, http.StatusOK)
@@ -106,8 +100,7 @@ func TestTodoLifecycle(t *testing.T) {
 }
 
 func TestTodoTextIsEscaped(t *testing.T) {
-	resetState(t)
-	mux := newMux()
+	mux := newTestMux()
 
 	rec := postForm(t, mux, "/add", url.Values{"text": {`<script>alert("x")</script>`}})
 	requireStatus(t, rec, http.StatusOK)
@@ -118,8 +111,7 @@ func TestTodoTextIsEscaped(t *testing.T) {
 }
 
 func TestValidationAndMissingTodos(t *testing.T) {
-	resetState(t)
-	mux := newMux()
+	mux := newTestMux()
 
 	rec := postForm(t, mux, "/add", url.Values{"text": {""}})
 	requireStatus(t, rec, http.StatusBadRequest)
