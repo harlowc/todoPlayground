@@ -59,6 +59,7 @@ func TestAddRendersTodoAndResetsForm(t *testing.T) {
 	body := rec.Body.String()
 	requireContains(t, body, `id="todo-1"`)
 	requireContains(t, body, "Buy milk")
+	requireContains(t, body, `hx-post="/toggle/1"`)
 	requireContains(t, body, `hx-get="/edit/1" hx-target="#todo-1" hx-swap="outerHTML"`)
 	requireContains(t, body, `hx-swap-oob="outerHTML"`)
 	requireContains(t, body, `placeholder="Add a todo..."`)
@@ -66,6 +67,21 @@ func TestAddRendersTodoAndResetsForm(t *testing.T) {
 	rec = get(t, mux, "/")
 	requireStatus(t, rec, http.StatusOK)
 	requireContains(t, rec.Body.String(), "Buy milk")
+}
+
+func TestHomeUsesLocalHTMXAsset(t *testing.T) {
+	mux := newTestMux()
+
+	rec := get(t, mux, "/")
+	requireStatus(t, rec, http.StatusOK)
+
+	body := rec.Body.String()
+	requireContains(t, body, `<script src="/static/htmx.min.js"></script>`)
+	requireNotContains(t, body, "unpkg.com")
+
+	rec = get(t, mux, "/static/htmx.min.js")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "htmx")
 }
 
 func TestTodoLifecycle(t *testing.T) {
@@ -99,6 +115,29 @@ func TestTodoLifecycle(t *testing.T) {
 	requireNotContains(t, rec.Body.String(), "Ship plan")
 }
 
+func TestTodoCompletionToggle(t *testing.T) {
+	mux := newTestMux()
+
+	rec := postForm(t, mux, "/add", url.Values{"text": {"Read docs"}})
+	requireStatus(t, rec, http.StatusOK)
+	requireNotContains(t, rec.Body.String(), "checked")
+	requireNotContains(t, rec.Body.String(), `class="todo-item completed"`)
+
+	rec = postForm(t, mux, "/toggle/1", url.Values{"completed": {"on"}})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `class="todo-item completed"`)
+	requireContains(t, rec.Body.String(), "checked")
+
+	rec = get(t, mux, "/")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `class="todo-item completed"`)
+
+	rec = postForm(t, mux, "/toggle/1", nil)
+	requireStatus(t, rec, http.StatusOK)
+	requireNotContains(t, rec.Body.String(), `class="todo-item completed"`)
+	requireNotContains(t, rec.Body.String(), "checked")
+}
+
 func TestTodoTextIsEscaped(t *testing.T) {
 	mux := newTestMux()
 
@@ -123,5 +162,18 @@ func TestValidationAndMissingTodos(t *testing.T) {
 	requireStatus(t, rec, http.StatusNotFound)
 
 	rec = postForm(t, mux, "/update/42", url.Values{"text": {"Nope"}})
+	requireStatus(t, rec, http.StatusNotFound)
+
+	rec = postForm(t, mux, "/toggle/42", url.Values{"completed": {"on"}})
+	requireStatus(t, rec, http.StatusNotFound)
+
+	rec = postForm(t, mux, "/remove/42", nil)
+	requireStatus(t, rec, http.StatusNotFound)
+}
+
+func TestUnknownRouteReturnsNotFound(t *testing.T) {
+	mux := newTestMux()
+
+	rec := get(t, mux, "/missing")
 	requireStatus(t, rec, http.StatusNotFound)
 }

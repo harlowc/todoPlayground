@@ -21,6 +21,11 @@ func newApp(store todoStore) *app {
 }
 
 func (a *app) home(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+
 	todos, err := a.store.List()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -162,13 +167,46 @@ func (a *app) remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := a.store.Delete(id); err != nil {
+	deleted, err := a.store.Delete(id)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !deleted {
+		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/html")
 	fmt.Fprintf(w, `<div id="todo-%d" hx-swap-oob="remove">#todo-%d</div>`, id, id)
+}
+
+func (a *app) toggle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id, ok := parseTodoID(w, r)
+	if !ok {
+		return
+	}
+
+	completed := r.FormValue("completed") == "on"
+	t, found, err := a.store.SetCompleted(id, completed)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	if err := tmpl.ExecuteTemplate(w, "todo-item", t); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func parseTodoID(w http.ResponseWriter, r *http.Request) (int, bool) {
@@ -185,9 +223,11 @@ func newMux(store todoStore) *http.ServeMux {
 	app := newApp(store)
 
 	mux := http.NewServeMux()
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	mux.HandleFunc("/", app.home)
 	mux.HandleFunc("POST /add", app.add)
 	mux.HandleFunc("POST /remove/{id}", app.remove)
+	mux.HandleFunc("POST /toggle/{id}", app.toggle)
 	mux.HandleFunc("GET /edit/{id}", app.edit)
 	mux.HandleFunc("POST /update/{id}", app.update)
 	mux.HandleFunc("GET /cancel/{id}", app.cancel)

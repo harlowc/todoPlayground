@@ -108,3 +108,4 @@ GOCACHE=/tmp/test1-go-cache go test ./...
 ## Notes
 
 Use `TODO_STORE=memory` for ephemeral local state or `TODO_STORE=postgres` for Dockerized Postgres-backed persistence.
+HTMX is vendored in `static/htmx.min.js` so the app does not need to load it from a CDN at runtime.

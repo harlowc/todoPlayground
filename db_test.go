@@ -63,6 +63,9 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
+	if created.Completed {
+		t.Fatal("created todo is completed, want incomplete by default")
+	}
 
 	reloaded := newPostgresStore(db)
 	todos, err := reloaded.List()
@@ -94,6 +97,29 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 	}
 	if got.Text != "Ship docs" {
 		t.Fatalf("got.Text = %q, want %q", got.Text, "Ship docs")
+	}
+
+	completed, found, err := reloadedAgain.SetCompleted(created.ID, true)
+	if err != nil {
+		t.Fatalf("SetCompleted() error = %v", err)
+	}
+	if !found {
+		t.Fatal("SetCompleted() did not find updated todo")
+	}
+	if !completed.Completed {
+		t.Fatal("completed.Completed = false, want true")
+	}
+
+	completedAgain := newPostgresStore(db)
+	got, found, err = completedAgain.Get(created.ID)
+	if err != nil {
+		t.Fatalf("Get() after SetCompleted error = %v", err)
+	}
+	if !found {
+		t.Fatal("Get() after SetCompleted did not find todo")
+	}
+	if !got.Completed {
+		t.Fatal("got.Completed = false, want persisted true")
 	}
 
 	deleted, err := reloadedAgain.Delete(created.ID)

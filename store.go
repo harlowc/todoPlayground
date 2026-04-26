@@ -9,8 +9,9 @@ import (
 )
 
 type todo struct {
-	ID   int
-	Text string
+	ID        int
+	Text      string
+	Completed bool
 }
 
 type todoStore interface {
@@ -18,6 +19,7 @@ type todoStore interface {
 	Get(id int) (todo, bool, error)
 	Create(text string) (todo, error)
 	Update(id int, text string) (todo, bool, error)
+	SetCompleted(id int, completed bool) (todo, bool, error)
 	Delete(id int) (bool, error)
 	Close() error
 }
@@ -84,6 +86,19 @@ func (s *memoryStore) Update(id int, text string) (todo, bool, error) {
 	return todo{}, false, nil
 }
 
+func (s *memoryStore) SetCompleted(id int, completed bool) (todo, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for i, t := range s.todos {
+		if t.ID == id {
+			s.todos[i].Completed = completed
+			return s.todos[i], true, nil
+		}
+	}
+	return todo{}, false, nil
+}
+
 func (s *memoryStore) Delete(id int) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -105,7 +120,7 @@ func (s *postgresStore) List() ([]todo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	rows, err := s.db.QueryContext(ctx, `SELECT id, text FROM todos ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, text, completed FROM todos ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +129,7 @@ func (s *postgresStore) List() ([]todo, error) {
 	var todos []todo
 	for rows.Next() {
 		var t todo
-		if err := rows.Scan(&t.ID, &t.Text); err != nil {
+		if err := rows.Scan(&t.ID, &t.Text, &t.Completed); err != nil {
 			return nil, err
 		}
 		todos = append(todos, t)
@@ -130,7 +145,7 @@ func (s *postgresStore) Get(id int) (todo, bool, error) {
 	defer cancel()
 
 	var t todo
-	err := s.db.QueryRowContext(ctx, `SELECT id, text FROM todos WHERE id = $1`, id).Scan(&t.ID, &t.Text)
+	err := s.db.QueryRowContext(ctx, `SELECT id, text, completed FROM todos WHERE id = $1`, id).Scan(&t.ID, &t.Text, &t.Completed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return todo{}, false, nil
 	}
@@ -147,9 +162,9 @@ func (s *postgresStore) Create(text string) (todo, error) {
 	var t todo
 	err := s.db.QueryRowContext(
 		ctx,
-		`INSERT INTO todos (text) VALUES ($1) RETURNING id, text`,
+		`INSERT INTO todos (text) VALUES ($1) RETURNING id, text, completed`,
 		text,
-	).Scan(&t.ID, &t.Text)
+	).Scan(&t.ID, &t.Text, &t.Completed)
 	if err != nil {
 		return todo{}, err
 	}
@@ -166,10 +181,33 @@ func (s *postgresStore) Update(id int, text string) (todo, bool, error) {
 		`UPDATE todos
 		 SET text = $2, updated_at = NOW()
 		 WHERE id = $1
-		 RETURNING id, text`,
+		 RETURNING id, text, completed`,
 		id,
 		text,
-	).Scan(&t.ID, &t.Text)
+	).Scan(&t.ID, &t.Text, &t.Completed)
+	if errors.Is(err, sql.ErrNoRows) {
+		return todo{}, false, nil
+	}
+	if err != nil {
+		return todo{}, false, err
+	}
+	return t, true, nil
+}
+
+func (s *postgresStore) SetCompleted(id int, completed bool) (todo, bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var t todo
+	err := s.db.QueryRowContext(
+		ctx,
+		`UPDATE todos
+		 SET completed = $2, updated_at = NOW()
+		 WHERE id = $1
+		 RETURNING id, text, completed`,
+		id,
+		completed,
+	).Scan(&t.ID, &t.Text, &t.Completed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return todo{}, false, nil
 	}
