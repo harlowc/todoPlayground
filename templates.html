@@ -1,0 +1,77 @@
+{{define "base"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>todoPlayground</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 500px; margin: 60px auto; padding: 0 20px; background: #f5f5f5; }
+    h1 { margin-bottom: 20px; color: #333; }
+    .add-form { display: flex; gap: 8px; margin-bottom: 24px; }
+    .add-form input { flex: 1; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+    .add-form button { padding: 10px 20px; background: #4f46e5; color: #fff; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
+    .add-form button:hover { background: #4338ca; }
+    .add-form button:disabled { opacity: 0.5; cursor: default; }
+    ul { list-style: none; }
+    .todo-item { display: flex; align-items: center; justify-content: space-between; background: #fff; padding: 12px 16px; margin-bottom: 6px; border-radius: 6px; border: 1px solid #e5e5e5; animation: fadeIn 0.2s ease; }
+    .todo-item span { flex: 1; font-size: 16px; }
+    .remove-btn { padding: 6px 12px; background: none; border: 1px solid #e53e3e; color: #e53e3e; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    .edit-btn, .cancel-btn { padding: 6px 12px; background: none; border: 1px solid #6b7280; color: #6b7280; border-radius: 4px; cursor: pointer; font-size: 14px; text-decoration: none; margin-left: 4px; }
+    .edit-btn:hover { background: #f3f4f6; }
+    .save-btn { padding: 6px 12px; background: none; border: 1px solid #059669; color: #059669; border-radius: 4px; cursor: pointer; font-size: 14px; margin-left: 4px; }
+    .save-btn:hover { background: #059669; color: #fff; }
+    .cancel-btn:hover { background: #f3f4f6; }
+    .edit-input { padding: 6px 10px; border: 1px solid #4f46e5; border-radius: 4px; font-size: 16px; flex: 1; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+  <h1>Todos</h1>
+  {{template "add-form" .}}
+  <ul id="todo-list">
+    {{range .}}
+    {{template "todo-item" .}}
+    {{end}}
+  </ul>
+</body>
+</html>{{end}}
+
+{{define "add-form"}}
+  <div id="add-form">
+    <form class="add-form" hx-post="/add" hx-target="#todo-list" hx-swap="beforeend">
+      <input type="text" name="text" placeholder="Add a todo..." required autofocus>
+      <button type="submit">add</button>
+    </form>
+  </div>
+{{end}}
+
+{{define "todo-item"}}
+    <li id="todo-{{.ID}}" class="todo-item">
+      <span>{{.Text}}</span>
+      <a href="javascript:void(0)" class="edit-btn" hx-get="/edit/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML">edit</a>
+      <form hx-post="/remove/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML" method="post">
+        <button class="remove-btn">remove</button>
+      </form>
+    </li>
+{{end}}
+
+{{define "edit-item"}}
+    <li id="todo-{{.ID}}" class="todo-item">
+      <form hx-post="/update/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML" method="post">
+        <input class="edit-input" type="text" name="text" value="{{.Text}}" autofocus>
+        <button class="save-btn">save</button>
+        <a href="javascript:void(0)" class="cancel-btn" hx-get="/cancel/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML">cancel</a>
+      </form>
+    </li>
+{{end}}
+
+{{define "reset-add-form"}}
+    <div id="add-form" hx-swap-oob="outerHTML">
+      <form class="add-form" hx-post="/add" hx-target="#todo-list" hx-swap="beforeend">
+        <input type="text" name="text" placeholder="Add a todo..." required autofocus>
+        <button type="submit">add</button>
+      </form>
+    </div>
+{{end}}
