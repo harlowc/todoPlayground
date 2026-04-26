@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+echo "Starting Postgres..."
+docker compose up -d postgres
+
+echo "Waiting for Postgres to become healthy..."
+while [ "$(docker inspect --format '{{.State.Health.Status}}' todo-playground-postgres)" != "healthy" ]; do
+  sleep 1
+done
+
+echo "Starting todoPlayground at http://localhost:8080"
+TODO_STORE="${TODO_STORE:-postgres}" go run .

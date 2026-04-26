@@ -1,5 +1,8 @@
 .claude/
 PLAN.md
+.env
+.env.*
+!.env.example
 .DS_Store
 todoPlayground
 *.db

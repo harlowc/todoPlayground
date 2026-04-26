@@ -18,10 +18,85 @@ Then open:
 http://localhost:8080
 ```
 
+To start the app and Dockerized Postgres together for local development:
+
+```sh
+make dev
+```
+
+This starts the `postgres` service, waits for it to become healthy, then runs the Go app with `TODO_STORE=postgres`.
+Press `Ctrl-C` to stop the Go app. Run `make postgres-down` when you want to stop the Postgres container too.
+
+The app can read its server and Postgres settings from environment variables:
+
+- `SERVER_ADDR` default: `:8080`
+- `TODO_STORE` default: `memory`
+- `POSTGRES_HOST` default: `localhost`
+- `POSTGRES_PORT` default: `5432`
+- `POSTGRES_DB` default: `todo_playground`
+- `POSTGRES_USER` default: `todo_user`
+- `POSTGRES_PASSWORD` default: `todo_password`
+- `POSTGRES_SSLMODE` default: `disable`
+
+## Local Postgres
+
+To start only the local Postgres container:
+
+```sh
+make postgres-up
+```
+
+To stop it and remove the Compose network:
+
+```sh
+make postgres-down
+```
+
+The container exposes Postgres on `localhost:5432` with:
+
+- database: `todo_playground`
+- user: `todo_user`
+- password: `todo_password`
+
+By default the app still uses in-memory storage. To run it against Postgres:
+
+```sh
+TODO_STORE=postgres go run .
+```
+
+## Example Env File
+
+You can keep local settings in a `.env` file. That file is ignored by Git. A typical local setup would look like:
+
+```dotenv
+SERVER_ADDR=:8080
+TODO_STORE=postgres
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=todo_playground
+POSTGRES_USER=todo_user
+POSTGRES_PASSWORD=todo_password
+POSTGRES_SSLMODE=disable
+```
+
+## Postgres Check
+
+To verify the app can reach Postgres and apply the initial schema migration:
+
+```sh
+make test-db
+```
+
+If the Go build cache is not writable in your environment, use:
+
+```sh
+RUN_DB_TESTS=1 GOCACHE=/tmp/test1-go-cache go test ./...
+```
+
 ## Test
 
 ```sh
-go test ./...
+make test
 ```
 
 If the Go build cache is not writable in your environment, use a local or temporary cache:
@@ -32,4 +107,4 @@ GOCACHE=/tmp/test1-go-cache go test ./...
 
 ## Notes
 
-Todos are stored in memory. Restarting the server clears the list.
+Use `TODO_STORE=memory` for ephemeral local state or `TODO_STORE=postgres` for Dockerized Postgres-backed persistence.

@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 var tmpl = template.Must(template.ParseFiles("templates.html"))
@@ -19,7 +21,13 @@ func newApp(store todoStore) *app {
 }
 
 func (a *app) home(w http.ResponseWriter, r *http.Request) {
-	if err := tmpl.ExecuteTemplate(w, "base", a.store.List()); err != nil {
+	todos, err := a.store.List()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tmpl.ExecuteTemplate(w, "base", todos); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -29,13 +37,18 @@ func (a *app) add(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	text := r.FormValue("text")
 	if text == "" {
 		http.Error(w, "text required", http.StatusBadRequest)
 		return
 	}
 
-	t := a.store.Create(text)
+	t, err := a.store.Create(text)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "text/html")
 	if err := tmpl.ExecuteTemplate(w, "todo-item", t); err != nil {
@@ -52,12 +65,17 @@ func (a *app) edit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	id, ok := parseTodoID(w, r)
 	if !ok {
 		return
 	}
 
-	t, found := a.store.Get(id)
+	t, found, err := a.store.Get(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if !found {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -74,6 +92,7 @@ func (a *app) update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	id, ok := parseTodoID(w, r)
 	if !ok {
 		return
@@ -85,7 +104,11 @@ func (a *app) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, found := a.store.Update(id, text)
+	updated, found, err := a.store.Update(id, text)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if !found {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -106,12 +129,17 @@ func (a *app) cancel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	id, ok := parseTodoID(w, r)
 	if !ok {
 		return
 	}
 
-	t, found := a.store.Get(id)
+	t, found, err := a.store.Get(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if !found {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -128,12 +156,16 @@ func (a *app) remove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	id, ok := parseTodoID(w, r)
 	if !ok {
 		return
 	}
 
-	a.store.Delete(id)
+	if _, err := a.store.Delete(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "text/html")
 	fmt.Fprintf(w, `<div id="todo-%d" hx-swap-oob="remove">#todo-%d</div>`, id, id)
@@ -162,7 +194,43 @@ func newMux(store todoStore) *http.ServeMux {
 	return mux
 }
 
+func newConfiguredStore(cfg config) (todoStore, error) {
+	switch cfg.store {
+	case "memory":
+		return newMemoryStore(), nil
+	case "postgres":
+		db, err := openPostgresDB(cfg.postgres)
+		if err != nil {
+			return nil, err
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := pingPostgres(ctx, db); err != nil {
+			db.Close()
+			return nil, err
+		}
+		if err := runMigrations(ctx, db); err != nil {
+			db.Close()
+			return nil, err
+		}
+
+		return newPostgresStore(db), nil
+	default:
+		return nil, fmt.Errorf("unsupported TODO_STORE %q", cfg.store)
+	}
+}
+
 func main() {
-	fmt.Println("Server starting at http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", newMux(newMemoryStore())))
+	cfg := loadConfig()
+
+	store, err := newConfiguredStore(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer store.Close()
+
+	fmt.Printf("Server starting at http://localhost%s\n", cfg.serverAddr)
+	log.Fatal(http.ListenAndServe(cfg.serverAddr, newMux(store)))
 }
