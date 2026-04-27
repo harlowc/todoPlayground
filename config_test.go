@@ -32,8 +32,8 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.postgres.user != "todo_user" {
 		t.Fatalf("user = %q, want %q", cfg.postgres.user, "todo_user")
 	}
-	if cfg.postgres.password != "todo_password" {
-		t.Fatalf("password = %q, want %q", cfg.postgres.password, "todo_password")
+	if cfg.postgres.password != "" {
+		t.Fatalf("password = %q, want empty", cfg.postgres.password)
 	}
 	if cfg.postgres.sslMode != "disable" {
 		t.Fatalf("sslMode = %q, want %q", cfg.postgres.sslMode, "disable")

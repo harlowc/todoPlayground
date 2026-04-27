@@ -239,6 +239,10 @@ func newConfiguredStore(cfg config) (todoStore, error) {
 	case "memory":
 		return newMemoryStore(), nil
 	case "postgres":
+		if cfg.postgres.password == "" {
+			return nil, fmt.Errorf("POSTGRES_PASSWORD is required when TODO_STORE=postgres")
+		}
+
 		db, err := openPostgresDB(cfg.postgres)
 		if err != nil {
 			return nil, err

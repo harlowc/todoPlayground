@@ -177,3 +177,22 @@ func TestUnknownRouteReturnsNotFound(t *testing.T) {
 	rec := get(t, mux, "/missing")
 	requireStatus(t, rec, http.StatusNotFound)
 }
+
+func TestPostgresStoreRequiresPassword(t *testing.T) {
+	_, err := newConfiguredStore(config{
+		store: "postgres",
+		postgres: postgresConfig{
+			host:    "localhost",
+			port:    "5432",
+			name:    "todo_playground",
+			user:    "todo_user",
+			sslMode: "disable",
+		},
+	})
+	if err == nil {
+		t.Fatal("newConfiguredStore() error = nil, want POSTGRES_PASSWORD error")
+	}
+	if !strings.Contains(err.Error(), "POSTGRES_PASSWORD is required") {
+		t.Fatalf("newConfiguredStore() error = %q, want POSTGRES_PASSWORD error", err)
+	}
+}

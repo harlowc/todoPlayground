@@ -35,7 +35,7 @@ The app can read its server and Postgres settings from environment variables:
 - `POSTGRES_PORT` default: `5432`
 - `POSTGRES_DB` default: `todo_playground`
 - `POSTGRES_USER` default: `todo_user`
-- `POSTGRES_PASSWORD` default: `todo_password`
+- `POSTGRES_PASSWORD` required when `TODO_STORE=postgres`
 - `POSTGRES_SSLMODE` default: `disable`
 
 ## Local Postgres
@@ -56,7 +56,7 @@ The container exposes Postgres on `localhost:5432` with:
 
 - database: `todo_playground`
 - user: `todo_user`
-- password: `todo_password`
+- password: whatever you set in your local `.env` file or shell as `POSTGRES_PASSWORD`
 
 By default the app still uses in-memory storage. To run it against Postgres:
 
@@ -66,7 +66,13 @@ TODO_STORE=postgres go run .
 
 ## Example Env File
 
-You can keep local settings in a `.env` file. That file is ignored by Git. A typical local setup would look like:
+You can keep local settings in a `.env` file. That file is ignored by Git. Start from the committed template, then choose your own local password:
+
+```sh
+cp .env.example .env
+```
+
+A local setup should look like:
 
 ```dotenv
 SERVER_ADDR=:8080
@@ -75,7 +81,7 @@ POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_DB=todo_playground
 POSTGRES_USER=todo_user
-POSTGRES_PASSWORD=todo_password
+POSTGRES_PASSWORD=replace-with-a-local-secret
 POSTGRES_SSLMODE=disable
 ```
 

@@ -1,14 +1,13 @@
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: todo-playground-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: todo_playground
       POSTGRES_USER: todo_user
-      POSTGRES_PASSWORD: todo_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env or your shell before starting Postgres}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

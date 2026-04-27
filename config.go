@@ -30,7 +30,7 @@ func loadConfig() config {
 			port:     getEnv("POSTGRES_PORT", "5432"),
 			name:     getEnv("POSTGRES_DB", "todo_playground"),
 			user:     getEnv("POSTGRES_USER", "todo_user"),
-			password: getEnv("POSTGRES_PASSWORD", "todo_password"),
+			password: getEnv("POSTGRES_PASSWORD", ""),
 			sslMode:  getEnv("POSTGRES_SSLMODE", "disable"),
 		},
 	}

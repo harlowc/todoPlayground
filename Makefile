@@ -13,5 +13,10 @@ test:
 	go test ./...
 
 test-db:
-	docker compose up -d postgres
-	RUN_DB_TESTS=1 go test ./...
+	@if [ -z "$$POSTGRES_PASSWORD" ]; then echo "POSTGRES_PASSWORD is required for make test-db"; exit 1; fi
+	@set -eu; \
+		export COMPOSE_PROJECT_NAME=todo-playground-test; \
+		export POSTGRES_PORT="$${POSTGRES_TEST_PORT:-55432}"; \
+		docker compose up -d --wait postgres; \
+		trap 'docker compose down -v' EXIT; \
+		RUN_DB_TESTS=1 go test ./...
