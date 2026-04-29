@@ -60,6 +60,23 @@ func TestPostgresConnectionAndMigrations(t *testing.T) {
 	if !hasDueDate {
 		t.Fatal("todos.due_date column does not exist after migrations")
 	}
+
+	for _, column := range []string{"category", "priority", "notes"} {
+		var exists bool
+		err = db.QueryRowContext(ctx, `
+			SELECT EXISTS (
+				SELECT 1
+				FROM information_schema.columns
+				WHERE table_schema = 'public' AND table_name = 'todos' AND column_name = $1
+			)
+		`, column).Scan(&exists)
+		if err != nil {
+			t.Fatalf("check todos.%s column error = %v", column, err)
+		}
+		if !exists {
+			t.Fatalf("todos.%s column does not exist after migrations", column)
+		}
+	}
 }
 
 func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
@@ -74,7 +91,7 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 	resetPostgresTodos(t, db)
 
 	store := newPostgresStore(db)
-	created, err := store.Create("Write docs", "")
+	created, err := store.Create(todoInput{Text: "Write docs", Priority: "normal"})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -94,7 +111,7 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 		t.Fatalf("List() = %#v, want one persisted todo", todos)
 	}
 
-	updated, found, err := reloaded.Update(created.ID, "Ship docs", "")
+	updated, found, err := reloaded.Update(created.ID, todoInput{Text: "Ship docs", Priority: "normal"})
 	if err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
@@ -170,7 +187,7 @@ func TestPostgresStorePersistsDueDateAcrossReload(t *testing.T) {
 	resetPostgresTodos(t, db)
 
 	store := newPostgresStore(db)
-	created, err := store.Create("Pay rent", "2099-01-02")
+	created, err := store.Create(todoInput{Text: "Pay rent", DueDate: "2099-01-02", Priority: "normal"})
 	if err != nil {
 		t.Fatalf("Create() with due date error = %v", err)
 	}
@@ -190,7 +207,7 @@ func TestPostgresStorePersistsDueDateAcrossReload(t *testing.T) {
 		t.Fatalf("got.DueDate = %q, want %q", got.DueDate, "2099-01-02")
 	}
 
-	updated, found, err := reloaded.Update(created.ID, "Pay rent online", "2099-02-03")
+	updated, found, err := reloaded.Update(created.ID, todoInput{Text: "Pay rent online", DueDate: "2099-02-03", Priority: "normal"})
 	if err != nil {
 		t.Fatalf("Update() with due date error = %v", err)
 	}
@@ -201,7 +218,7 @@ func TestPostgresStorePersistsDueDateAcrossReload(t *testing.T) {
 		t.Fatalf("updated.DueDate = %q, want %q", updated.DueDate, "2099-02-03")
 	}
 
-	withoutDueDate, found, err := reloaded.Update(created.ID, "Pay rent later", "")
+	withoutDueDate, found, err := reloaded.Update(created.ID, todoInput{Text: "Pay rent later", Priority: "normal"})
 	if err != nil {
 		t.Fatalf("Update() clearing due date error = %v", err)
 	}
@@ -210,6 +227,60 @@ func TestPostgresStorePersistsDueDateAcrossReload(t *testing.T) {
 	}
 	if withoutDueDate.DueDate != "" {
 		t.Fatalf("withoutDueDate.DueDate = %q, want no due date", withoutDueDate.DueDate)
+	}
+}
+
+func TestPostgresStorePersistsCategoryPriorityAndNotesAcrossReload(t *testing.T) {
+	if getEnv("RUN_DB_TESTS", "") != "1" {
+		t.Skip("set RUN_DB_TESTS=1 to run Postgres integration tests")
+	}
+
+	cfg := loadConfig()
+	db := openTestDB(t, cfg.postgres)
+	defer db.Close()
+
+	resetPostgresTodos(t, db)
+
+	store := newPostgresStore(db)
+	created, err := store.Create(todoInput{
+		Text:     "Plan launch",
+		Category: "Work",
+		Priority: "high",
+		Notes:    "Confirm timeline with design.",
+	})
+	if err != nil {
+		t.Fatalf("Create() with organization fields error = %v", err)
+	}
+	if created.Category != "Work" || created.Priority != "high" || created.Notes != "Confirm timeline with design." {
+		t.Fatalf("created = %#v, want category, priority, and notes persisted", created)
+	}
+
+	reloaded := newPostgresStore(db)
+	got, found, err := reloaded.Get(created.ID)
+	if err != nil {
+		t.Fatalf("Get() after create error = %v", err)
+	}
+	if !found {
+		t.Fatal("Get() after create did not find todo")
+	}
+	if got.Category != "Work" || got.Priority != "high" || got.Notes != "Confirm timeline with design." {
+		t.Fatalf("got = %#v, want category, priority, and notes persisted", got)
+	}
+
+	updated, found, err := reloaded.Update(created.ID, todoInput{
+		Text:     "Plan launch checklist",
+		Category: "Ops",
+		Priority: "low",
+		Notes:    "Share checklist after standup.",
+	})
+	if err != nil {
+		t.Fatalf("Update() with organization fields error = %v", err)
+	}
+	if !found {
+		t.Fatal("Update() with organization fields did not find todo")
+	}
+	if updated.Category != "Ops" || updated.Priority != "low" || updated.Notes != "Share checklist after standup." {
+		t.Fatalf("updated = %#v, want updated category, priority, and notes", updated)
 	}
 }
 

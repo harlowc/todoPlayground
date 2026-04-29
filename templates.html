@@ -8,40 +8,57 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: system-ui, sans-serif; max-width: 560px; margin: 60px auto; padding: 0 20px; background: #f5f5f5; }
     h1 { margin-bottom: 20px; color: #333; }
-    .add-form { display: flex; gap: 8px; margin-bottom: 24px; }
+    .add-form { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) minmax(130px, 0.8fr); gap: 8px; margin-bottom: 24px; width: 100%; }
+    .view-nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .view-nav a { padding: 5px 10px; border: 1px solid #d1d5db; border-radius: 4px; color: #374151; font-size: 14px; text-decoration: none; }
+    .view-nav a[aria-current="page"] { background: #4f46e5; border-color: #4f46e5; color: #fff; }
     .edit-form { display: flex; align-items: center; gap: 8px; width: 100%; }
-    .add-form input { flex: 1; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
-    .add-form .due-date-input { flex: 0 0 150px; }
-    .add-form button { padding: 10px 20px; background: #4f46e5; color: #fff; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
+    .add-form input, .add-form select, .add-form textarea { min-width: 0; width: 100%; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+    .add-form .text-input { grid-column: 1 / -1; }
+    .add-form .notes-input { grid-column: 1 / -1; min-height: 72px; resize: vertical; }
+    .add-form button { grid-column: 1 / -1; padding: 10px 20px; background: #4f46e5; color: #fff; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; white-space: nowrap; }
     .add-form button:hover { background: #4338ca; }
     .add-form button:disabled { opacity: 0.5; cursor: default; }
-    .form-error { flex: 1 1 100%; color: #b91c1c; font-size: 14px; line-height: 1.3; }
+    .form-error { grid-column: 1 / -1; color: #b91c1c; font-size: 14px; line-height: 1.3; }
     .form-error:empty { display: none; }
     ul { list-style: none; }
-    .todo-item { display: flex; align-items: center; gap: 12px; background: #fff; padding: 12px 16px; margin-bottom: 6px; border-radius: 6px; border: 1px solid #e5e5e5; animation: fadeIn 0.2s ease; }
+    .todo-item { position: relative; display: flex; align-items: flex-start; gap: 8px; background: #fff; padding: 12px 42px 40px 16px; margin-bottom: 6px; border-radius: 6px; border: 1px solid #e5e5e5; animation: fadeIn 0.2s ease; }
     .todo-toggle { flex: 0 0 auto; width: 18px; height: 18px; accent-color: #4f46e5; cursor: pointer; }
     .todo-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
     .todo-text { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 16px; line-height: 1.4; }
-    .todo-due-date { color: #6b7280; font-size: 13px; line-height: 1.3; }
+    .todo-meta { display: flex; gap: 6px; flex-wrap: wrap; color: #6b7280; font-size: 13px; line-height: 1.3; }
+    .todo-notes { color: #4b5563; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
     .todo-item.completed .todo-text { color: #6b7280; text-decoration: line-through; }
-    .todo-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
-    .remove-btn { padding: 6px 12px; background: none; border: 1px solid #e53e3e; color: #e53e3e; border-radius: 4px; cursor: pointer; font-size: 14px; }
-    .edit-btn, .cancel-btn { padding: 6px 12px; background: none; border: 1px solid #6b7280; color: #6b7280; border-radius: 4px; cursor: pointer; font-size: 14px; text-decoration: none; }
+    .todo-menu { flex: 0 0 auto; position: relative; }
+    .todo-menu summary { width: 14px; height: 18px; border: 0; border-radius: 4px; color: #4b5563; display: grid; place-items: center; cursor: pointer; font-size: 11px; list-style: none; }
+    .todo-menu summary::-webkit-details-marker { display: none; }
+    .todo-menu-actions { position: absolute; z-index: 2; top: 28px; left: 0; display: flex; flex-direction: column; gap: 4px; min-width: 150px; padding: 6px; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; box-shadow: 0 8px 20px rgba(0,0,0,0.12); }
+    .todo-menu-actions button { display: block; width: 100%; padding: 6px 8px; background: none; border: 0; color: #374151; cursor: pointer; font-size: 14px; text-align: left; text-decoration: none; }
+    .todo-menu-actions button:hover, .todo-menu-actions a:hover { background: #f3f4f6; }
+    .edit-btn { position: absolute; right: 42px; bottom: 8px; padding: 5px 10px; background: none; border: 1px solid #6b7280; color: #6b7280; border-radius: 4px; cursor: pointer; font-size: 14px; text-decoration: none; }
+    .remove-form { position: absolute; top: 8px; right: 8px; }
+    .remove-btn { width: 24px; height: 24px; padding: 0; background: none; border: 1px solid #e53e3e; color: #e53e3e; border-radius: 999px; cursor: pointer; font-size: 14px; line-height: 1; }
+    .cancel-btn { padding: 6px 12px; background: none; border: 1px solid #6b7280; color: #6b7280; border-radius: 4px; cursor: pointer; font-size: 14px; text-decoration: none; }
+    .remove-btn:hover { background: #e53e3e; color: #fff; }
     .edit-btn:hover { background: #f3f4f6; }
     .save-btn { padding: 6px 12px; background: none; border: 1px solid #059669; color: #059669; border-radius: 4px; cursor: pointer; font-size: 14px; }
     .save-btn:hover { background: #059669; color: #fff; }
     .cancel-btn:hover { background: #f3f4f6; }
     .edit-input { padding: 6px 10px; border: 1px solid #4f46e5; border-radius: 4px; font-size: 16px; flex: 1; min-width: 0; }
+    .edit-category-input, .edit-priority-input { padding: 6px 10px; border: 1px solid #4f46e5; border-radius: 4px; font-size: 16px; flex: 0 0 120px; min-width: 0; }
     .edit-date-input { padding: 6px 10px; border: 1px solid #4f46e5; border-radius: 4px; font-size: 16px; flex: 0 0 150px; min-width: 0; }
+    .edit-notes-input { padding: 6px 10px; border: 1px solid #4f46e5; border-radius: 4px; font-size: 16px; flex: 1 1 100%; min-height: 72px; resize: vertical; }
+    @media (max-width: 760px) {
+      .add-form { grid-template-columns: 1fr 1fr; }
+      .add-form .text-input, .add-form .notes-input, .add-form button { grid-column: 1 / -1; }
+    }
     @media (max-width: 520px) {
       body { margin: 32px auto; padding: 0 14px; }
-      .add-form { flex-direction: column; }
-      .add-form .due-date-input { flex: 1 1 auto; width: 100%; }
-      .add-form button { width: 100%; }
+      .add-form { grid-template-columns: 1fr; }
       .todo-item { align-items: flex-start; flex-wrap: wrap; }
-      .todo-actions { width: 100%; justify-content: flex-end; }
       .edit-form { flex-wrap: wrap; }
       .edit-input { flex: 1 1 100%; }
+      .edit-category-input, .edit-priority-input { flex: 1 1 100%; }
       .edit-date-input { flex: 1 1 100%; }
     }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
@@ -58,9 +75,15 @@
 </head>
 <body>
   <h1>Todos</h1>
+  <nav class="view-nav" aria-label="Todo views">
+    <a href="/"{{if eq .View "all"}} aria-current="page"{{end}}>All</a>
+    <a href="/?view=active"{{if eq .View "active"}} aria-current="page"{{end}}>Active</a>
+    <a href="/?view=completed"{{if eq .View "completed"}} aria-current="page"{{end}}>Completed</a>
+    <a href="/?view=scheduled"{{if eq .View "scheduled"}} aria-current="page"{{end}}>Scheduled</a>
+  </nav>
   {{template "add-form" .}}
   <ul id="todo-list">
-    {{range .}}
+    {{range .Todos}}
     {{template "todo-item" .}}
     {{end}}
   </ul>
@@ -76,25 +99,53 @@
 {{end}}
 
 {{define "add-form-fields"}}
-      <input type="text" name="text" placeholder="Add a todo..." required autofocus>
+      <input class="text-input" type="text" name="text" placeholder="Add a todo..." required autofocus>
       <input class="due-date-input" type="date" name="due_date" aria-label="Due date">
+      <input class="category-input" type="text" name="category" placeholder="Category" aria-label="Category">
+      <select class="priority-input" name="priority" aria-label="Priority">
+        {{template "priority-options" "normal"}}
+      </select>
+      <textarea class="notes-input" name="notes" placeholder="Notes" aria-label="Notes"></textarea>
       <button type="submit">add</button>
       <p id="add-error" class="form-error" role="alert" aria-live="polite"></p>
 {{end}}
 
+{{define "priority-options"}}
+        <option value="low"{{if eq . "low"}} selected{{end}}>Low</option>
+        <option value="normal"{{if eq . "normal"}} selected{{end}}>Normal</option>
+        <option value="high"{{if eq . "high"}} selected{{end}}>High</option>
+{{end}}
+
 {{define "todo-item"}}
     <li id="todo-{{.ID}}" class="todo-item{{if .Completed}} completed{{end}}">
-      <input class="todo-toggle" type="checkbox" name="completed" aria-label="Mark {{.Text}} complete" hx-post="/toggle/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML" {{if .Completed}}checked{{end}}>
+      {{if .Completed}}
+      <input class="todo-toggle" type="checkbox" name="completed" aria-label="Mark {{.Text}} incomplete" hx-post="/completed/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML" checked>
+      {{else}}
+      <input class="todo-toggle" type="checkbox" name="completed" aria-label="Mark {{.Text}} complete" hx-post="/completed/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML">
+      {{end}}
+      {{if not .Completed}}
+      <details class="todo-menu">
+        <summary aria-label="More actions for {{.Text}}">&#9662;</summary>
+        <div class="todo-menu-actions">
+          <form hx-post="/done-tomorrow/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML" method="post">
+            <button>done + tomorrow</button>
+          </form>
+        </div>
+      </details>
+      {{end}}
       <div class="todo-content">
         <span class="todo-text">{{.Text}}</span>
-        {{if .DueDate}}<time class="todo-due-date" datetime="{{.DueDate}}">Due {{.DueDate}}</time>{{end}}
+        <div class="todo-meta">
+          {{if .Category}}<span>{{.Category}}</span>{{end}}
+          {{if .Priority}}<span>{{.PriorityLabel}}</span>{{end}}
+          {{if .DueDate}}<time datetime="{{.DueDate}}">Due {{.DueDate}}</time>{{end}}
+        </div>
+        {{if .Notes}}<p class="todo-notes">{{.Notes}}</p>{{end}}
       </div>
-      <div class="todo-actions">
-        <a href="javascript:void(0)" class="edit-btn" hx-get="/edit/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML">edit</a>
-        <form hx-post="/remove/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML" method="post">
-          <button class="remove-btn">remove</button>
-        </form>
-      </div>
+      <form class="remove-form" hx-post="/remove/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML" hx-confirm="Remove {{.Text}}?" method="post">
+        <button class="remove-btn" aria-label="Remove {{.Text}}">x</button>
+      </form>
+      <a href="javascript:void(0)" class="edit-btn" hx-get="/edit/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML">edit</a>
     </li>
 {{end}}
 
@@ -103,6 +154,11 @@
       <form class="edit-form" hx-post="/update/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML" method="post">
         <input class="edit-input" type="text" name="text" value="{{.Text}}" autofocus>
         <input class="edit-date-input" type="date" name="due_date" value="{{.DueDate}}" aria-label="Due date">
+        <input class="edit-category-input" type="text" name="category" value="{{.Category}}" aria-label="Category">
+        <select class="edit-priority-input" name="priority" aria-label="Priority">
+          {{template "priority-options" .Priority}}
+        </select>
+        <textarea class="edit-notes-input" name="notes" aria-label="Notes">{{.Notes}}</textarea>
         <button class="save-btn">save</button>
         <a href="javascript:void(0)" class="cancel-btn" hx-get="/cancel/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML">cancel</a>
         <p id="edit-error-{{.ID}}" class="form-error" role="alert" aria-live="polite"></p>

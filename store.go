@@ -13,13 +13,35 @@ type todo struct {
 	Text      string
 	Completed bool
 	DueDate   string
+	Category  string
+	Priority  string
+	Notes     string
+}
+
+type todoInput struct {
+	Text     string
+	DueDate  string
+	Category string
+	Priority string
+	Notes    string
+}
+
+func (t todo) PriorityLabel() string {
+	switch t.Priority {
+	case "low":
+		return "Low priority"
+	case "high":
+		return "High priority"
+	default:
+		return "Normal priority"
+	}
 }
 
 type todoStore interface {
 	List() ([]todo, error)
 	Get(id int) (todo, bool, error)
-	Create(text, dueDate string) (todo, error)
-	Update(id int, text, dueDate string) (todo, bool, error)
+	Create(input todoInput) (todo, error)
+	Update(id int, input todoInput) (todo, bool, error)
 	SetCompleted(id int, completed bool) (todo, bool, error)
 	Delete(id int) (bool, error)
 	Close() error
@@ -64,24 +86,34 @@ func (s *memoryStore) Get(id int) (todo, bool, error) {
 	return todo{}, false, nil
 }
 
-func (s *memoryStore) Create(text, dueDate string) (todo, error) {
+func (s *memoryStore) Create(input todoInput) (todo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	t := todo{ID: s.nextID, Text: text, DueDate: dueDate}
+	t := todo{
+		ID:       s.nextID,
+		Text:     input.Text,
+		DueDate:  input.DueDate,
+		Category: input.Category,
+		Priority: input.Priority,
+		Notes:    input.Notes,
+	}
 	s.todos = append(s.todos, t)
 	s.nextID++
 	return t, nil
 }
 
-func (s *memoryStore) Update(id int, text, dueDate string) (todo, bool, error) {
+func (s *memoryStore) Update(id int, input todoInput) (todo, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for i, t := range s.todos {
 		if t.ID == id {
-			s.todos[i].Text = text
-			s.todos[i].DueDate = dueDate
+			s.todos[i].Text = input.Text
+			s.todos[i].DueDate = input.DueDate
+			s.todos[i].Category = input.Category
+			s.todos[i].Priority = input.Priority
+			s.todos[i].Notes = input.Notes
 			return s.todos[i], true, nil
 		}
 	}
@@ -122,7 +154,7 @@ func (s *postgresStore) List() ([]todo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	rows, err := s.db.QueryContext(ctx, `SELECT id, text, completed, due_date FROM todos ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, text, completed, due_date, category, priority, notes FROM todos ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +178,7 @@ func (s *postgresStore) Get(id int) (todo, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	t, err := scanTodo(s.db.QueryRowContext(ctx, `SELECT id, text, completed, due_date FROM todos WHERE id = $1`, id))
+	t, err := scanTodo(s.db.QueryRowContext(ctx, `SELECT id, text, completed, due_date, category, priority, notes FROM todos WHERE id = $1`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return todo{}, false, nil
 	}
@@ -156,17 +188,20 @@ func (s *postgresStore) Get(id int) (todo, bool, error) {
 	return t, true, nil
 }
 
-func (s *postgresStore) Create(text, dueDate string) (todo, error) {
+func (s *postgresStore) Create(input todoInput) (todo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	t, err := scanTodo(s.db.QueryRowContext(
 		ctx,
-		`INSERT INTO todos (text, due_date)
-		 VALUES ($1, NULLIF($2, '')::date)
-		 RETURNING id, text, completed, due_date`,
-		text,
-		dueDate,
+		`INSERT INTO todos (text, due_date, category, priority, notes)
+		 VALUES ($1, NULLIF($2, '')::date, $3, $4, $5)
+		 RETURNING id, text, completed, due_date, category, priority, notes`,
+		input.Text,
+		input.DueDate,
+		input.Category,
+		input.Priority,
+		input.Notes,
 	))
 	if err != nil {
 		return todo{}, err
@@ -174,19 +209,27 @@ func (s *postgresStore) Create(text, dueDate string) (todo, error) {
 	return t, nil
 }
 
-func (s *postgresStore) Update(id int, text, dueDate string) (todo, bool, error) {
+func (s *postgresStore) Update(id int, input todoInput) (todo, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	t, err := scanTodo(s.db.QueryRowContext(
 		ctx,
 		`UPDATE todos
-		 SET text = $2, due_date = NULLIF($3, '')::date, updated_at = NOW()
+		 SET text = $2,
+		     due_date = NULLIF($3, '')::date,
+		     category = $4,
+		     priority = $5,
+		     notes = $6,
+		     updated_at = NOW()
 		 WHERE id = $1
-		 RETURNING id, text, completed, due_date`,
+		 RETURNING id, text, completed, due_date, category, priority, notes`,
 		id,
-		text,
-		dueDate,
+		input.Text,
+		input.DueDate,
+		input.Category,
+		input.Priority,
+		input.Notes,
 	))
 	if errors.Is(err, sql.ErrNoRows) {
 		return todo{}, false, nil
@@ -206,7 +249,7 @@ func (s *postgresStore) SetCompleted(id int, completed bool) (todo, bool, error)
 		`UPDATE todos
 		 SET completed = $2, updated_at = NOW()
 		 WHERE id = $1
-		 RETURNING id, text, completed, due_date`,
+		 RETURNING id, text, completed, due_date, category, priority, notes`,
 		id,
 		completed,
 	))
@@ -246,7 +289,7 @@ type todoScanner interface {
 func scanTodo(scanner todoScanner) (todo, error) {
 	var t todo
 	var dueDate sql.NullTime
-	err := scanner.Scan(&t.ID, &t.Text, &t.Completed, &dueDate)
+	err := scanner.Scan(&t.ID, &t.Text, &t.Completed, &dueDate, &t.Category, &t.Priority, &t.Notes)
 	if err != nil {
 		return todo{}, err
 	}

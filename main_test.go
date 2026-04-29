@@ -78,8 +78,13 @@ func TestAddRendersTodoAndResetsForm(t *testing.T) {
 	body := rec.Body.String()
 	requireContains(t, body, `id="todo-1"`)
 	requireContains(t, body, "Buy milk")
-	requireContains(t, body, `hx-post="/toggle/1"`)
-	requireContains(t, body, `hx-get="/edit/1" hx-target="#todo-1" hx-swap="outerHTML"`)
+	requireContains(t, body, `hx-post="/completed/1"`)
+	requireContains(t, body, `class="todo-menu"`)
+	requireContains(t, body, `aria-label="More actions for Buy milk"`)
+	requireContains(t, body, `class="edit-btn" hx-get="/edit/1" hx-target="#todo-1" hx-swap="outerHTML"`)
+	requireContains(t, body, `class="remove-form" hx-post="/remove/1"`)
+	requireContains(t, body, `hx-confirm="Remove Buy milk?"`)
+	requireContains(t, body, `aria-label="Remove Buy milk"`)
 	requireContains(t, body, `hx-swap-oob="outerHTML"`)
 	requireContains(t, body, `placeholder="Add a todo..."`)
 	requireContains(t, body, `id="add-error"`)
@@ -100,6 +105,25 @@ func TestHomeAllowsHTMXValidationErrorsToRender(t *testing.T) {
 	requireContains(t, body, "document.addEventListener")
 	requireContains(t, body, `getResponseHeader("HX-Retarget")`)
 	requireContains(t, body, "shouldSwap = true")
+}
+
+func TestAddFormUsesResponsiveGridLayout(t *testing.T) {
+	mux := newTestMux()
+
+	rec := get(t, mux, "/")
+	requireStatus(t, rec, http.StatusOK)
+
+	body := rec.Body.String()
+	requireContains(t, body, `.add-form { display: grid;`)
+	requireContains(t, body, `grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) minmax(130px, 0.8fr);`)
+	requireContains(t, body, `.add-form .text-input { grid-column: 1 / -1; }`)
+	requireContains(t, body, `.add-form .notes-input { grid-column: 1 / -1;`)
+	requireContains(t, body, `.add-form button { grid-column: 1 / -1;`)
+	requireContains(t, body, `@media (max-width: 760px)`)
+	requireContains(t, body, `.add-form { grid-template-columns: 1fr 1fr; }`)
+	requireContains(t, body, `@media (max-width: 520px)`)
+	requireContains(t, body, `.add-form { grid-template-columns: 1fr; }`)
+	requireContains(t, body, `class="text-input"`)
 }
 
 func TestHomeUsesLocalHTMXAsset(t *testing.T) {
@@ -178,27 +202,94 @@ func TestTodoLifecycle(t *testing.T) {
 	requireNotContains(t, rec.Body.String(), "Ship plan")
 }
 
-func TestTodoCompletionToggle(t *testing.T) {
+func TestTodoCompletionEndpoint(t *testing.T) {
 	mux := newTestMux()
 
 	rec := postForm(t, mux, "/add", url.Values{"text": {"Read docs"}})
 	requireStatus(t, rec, http.StatusOK)
 	requireNotContains(t, rec.Body.String(), "checked")
 	requireNotContains(t, rec.Body.String(), `class="todo-item completed"`)
+	requireContains(t, rec.Body.String(), `hx-post="/completed/1"`)
 
-	rec = postForm(t, mux, "/toggle/1", url.Values{"completed": {"on"}})
+	rec = postForm(t, mux, "/completed/1", url.Values{"completed": {"on"}})
 	requireStatus(t, rec, http.StatusOK)
-	requireContains(t, rec.Body.String(), `class="todo-item completed"`)
-	requireContains(t, rec.Body.String(), "checked")
+	requireContains(t, rec.Body.String(), `hx-swap-oob="remove"`)
 
 	rec = get(t, mux, "/")
 	requireStatus(t, rec, http.StatusOK)
 	requireContains(t, rec.Body.String(), `class="todo-item completed"`)
 
-	rec = postForm(t, mux, "/toggle/1", nil)
+	rec = postForm(t, mux, "/completed/1", nil)
 	requireStatus(t, rec, http.StatusOK)
 	requireNotContains(t, rec.Body.String(), `class="todo-item completed"`)
 	requireNotContains(t, rec.Body.String(), "checked")
+
+	rec = postForm(t, mux, "/toggle/1", url.Values{"completed": {"on"}})
+	requireStatus(t, rec, http.StatusNotFound)
+}
+
+func TestCheckingTodoCompletesItAndRemovesItFromActiveList(t *testing.T) {
+	mux := newTestMux()
+
+	rec := postForm(t, mux, "/add", url.Values{"text": {"Close invoice"}})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `hx-post="/completed/1"`)
+	requireContains(t, rec.Body.String(), `hx-post="/done-tomorrow/1"`)
+	requireContains(t, rec.Body.String(), `class="todo-menu"`)
+	requireNotContains(t, rec.Body.String(), `class="done-btn"`)
+	requireNotContains(t, rec.Body.String(), `class="tomorrow-btn"`)
+	requireNotContains(t, rec.Body.String(), `hx-post="/done/1"`)
+
+	rec = postForm(t, mux, "/completed/1", url.Values{"completed": {"on"}})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `hx-swap-oob="remove"`)
+
+	rec = postForm(t, mux, "/done/1", nil)
+	requireStatus(t, rec, http.StatusNotFound)
+
+	rec = get(t, mux, "/?view=active")
+	requireStatus(t, rec, http.StatusOK)
+	requireNotContains(t, rec.Body.String(), "Close invoice")
+
+	rec = get(t, mux, "/?view=completed")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "Close invoice")
+	requireContains(t, rec.Body.String(), `class="todo-item completed"`)
+	requireNotContains(t, rec.Body.String(), `hx-post="/done/1"`)
+}
+
+func TestDoneAndRecreateForTomorrowCompletesCurrentTodoAndCreatesTomorrowCopy(t *testing.T) {
+	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	mux := newTestMuxWithToday(newMemoryStore(), today)
+
+	rec := postForm(t, mux, "/add", url.Values{
+		"text":     {"Daily review"},
+		"category": {"Work"},
+		"priority": {"high"},
+		"notes":    {"Keep the habit moving."},
+	})
+	requireStatus(t, rec, http.StatusOK)
+
+	rec = postForm(t, mux, "/done-tomorrow/1", nil)
+	requireStatus(t, rec, http.StatusOK)
+	body := rec.Body.String()
+	requireContains(t, body, "Daily review")
+	requireContains(t, body, "Work")
+	requireContains(t, body, "High priority")
+	requireContains(t, body, "Keep the habit moving.")
+	requireContains(t, body, "Due 2026-04-30")
+	requireContains(t, body, `id="todo-2"`)
+
+	rec = get(t, mux, "/?view=active")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `id="todo-2"`)
+	requireContains(t, rec.Body.String(), "Due 2026-04-30")
+	requireNotContains(t, rec.Body.String(), `id="todo-1"`)
+
+	rec = get(t, mux, "/?view=completed")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `id="todo-1"`)
+	requireNotContains(t, rec.Body.String(), `id="todo-2"`)
 }
 
 func TestTodoDueDateLifecycle(t *testing.T) {
@@ -229,6 +320,103 @@ func TestTodoDueDateLifecycle(t *testing.T) {
 	requireStatus(t, rec, http.StatusOK)
 	requireContains(t, rec.Body.String(), "Pay rent online")
 	requireContains(t, rec.Body.String(), "Due 2099-02-03")
+}
+
+func TestTodoOrganizationFieldsLifecycle(t *testing.T) {
+	mux := newTestMux()
+
+	rec := get(t, mux, "/")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `name="category"`)
+	requireContains(t, rec.Body.String(), `name="priority"`)
+	requireContains(t, rec.Body.String(), `name="notes"`)
+
+	rec = postForm(t, mux, "/add", url.Values{
+		"text":     {"Plan launch"},
+		"category": {"Work"},
+		"priority": {"high"},
+		"notes":    {"Confirm timeline with design."},
+	})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "Plan launch")
+	requireContains(t, rec.Body.String(), "Work")
+	requireContains(t, rec.Body.String(), "High priority")
+	requireContains(t, rec.Body.String(), "Confirm timeline with design.")
+
+	rec = get(t, mux, "/edit/1")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `name="category" value="Work"`)
+	requireContains(t, rec.Body.String(), `<option value="high" selected>High</option>`)
+	requireContains(t, rec.Body.String(), `<textarea class="edit-notes-input" name="notes" aria-label="Notes">Confirm timeline with design.</textarea>`)
+
+	rec = postForm(t, mux, "/update/1", url.Values{
+		"text":     {"Plan launch checklist"},
+		"category": {"Ops"},
+		"priority": {"low"},
+		"notes":    {"Share checklist after standup."},
+	})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "Plan launch checklist")
+	requireContains(t, rec.Body.String(), "Ops")
+	requireContains(t, rec.Body.String(), "Low priority")
+	requireContains(t, rec.Body.String(), "Share checklist after standup.")
+	requireNotContains(t, rec.Body.String(), "Confirm timeline with design.")
+}
+
+func TestTodoPriorityIsValidated(t *testing.T) {
+	mux := newTestMux()
+
+	rec := postForm(t, mux, "/add", url.Values{
+		"text":     {"Pick a priority"},
+		"priority": {"urgent"},
+	})
+	requireStatus(t, rec, http.StatusBadRequest)
+	requireContains(t, rec.Body.String(), "priority must be low, normal, or high")
+	if got := rec.Header().Get("HX-Retarget"); got != "#add-error" {
+		t.Fatalf("HX-Retarget = %q, want #add-error", got)
+	}
+}
+
+func TestTodoViewsFilterActiveCompletedAndScheduledTodos(t *testing.T) {
+	mux := newTestMux()
+
+	rec := postForm(t, mux, "/add", url.Values{"text": {"Active task"}})
+	requireStatus(t, rec, http.StatusOK)
+
+	rec = postForm(t, mux, "/add", url.Values{"text": {"Completed task"}})
+	requireStatus(t, rec, http.StatusOK)
+	rec = postForm(t, mux, "/completed/2", url.Values{"completed": {"on"}})
+	requireStatus(t, rec, http.StatusOK)
+
+	rec = postForm(t, mux, "/add", url.Values{
+		"text":     {"Scheduled task"},
+		"due_date": {"2099-01-02"},
+	})
+	requireStatus(t, rec, http.StatusOK)
+
+	rec = get(t, mux, "/?view=active")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `aria-current="page">Active</a>`)
+	requireContains(t, rec.Body.String(), "Active task")
+	requireContains(t, rec.Body.String(), "Scheduled task")
+	requireNotContains(t, rec.Body.String(), "Completed task")
+
+	rec = get(t, mux, "/?view=completed")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `aria-current="page">Completed</a>`)
+	requireContains(t, rec.Body.String(), "Completed task")
+	requireNotContains(t, rec.Body.String(), "Active task")
+	requireNotContains(t, rec.Body.String(), "Scheduled task")
+
+	rec = get(t, mux, "/?view=scheduled")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `aria-current="page">Scheduled</a>`)
+	requireContains(t, rec.Body.String(), "Scheduled task")
+	requireNotContains(t, rec.Body.String(), "Active task")
+	requireNotContains(t, rec.Body.String(), "Completed task")
+
+	rec = get(t, mux, "/?view=not-real")
+	requireStatus(t, rec, http.StatusBadRequest)
 }
 
 func TestTodoDueDateIsOptionalAndValidated(t *testing.T) {
@@ -276,7 +464,11 @@ func TestAddRejectsPastDueDate(t *testing.T) {
 func TestUpdateOnlyRejectsPastDueDateWhenDateChanges(t *testing.T) {
 	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
 	store := newMemoryStore()
-	created, err := store.Create("Renew permit", "2026-04-28")
+	created, err := store.Create(todoInput{
+		Text:     "Renew permit",
+		DueDate:  "2026-04-28",
+		Priority: "normal",
+	})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -334,7 +526,7 @@ func TestValidationAndMissingTodos(t *testing.T) {
 	rec = postForm(t, mux, "/update/42", url.Values{"text": {"Nope"}})
 	requireStatus(t, rec, http.StatusNotFound)
 
-	rec = postForm(t, mux, "/toggle/42", url.Values{"completed": {"on"}})
+	rec = postForm(t, mux, "/completed/42", url.Values{"completed": {"on"}})
 	requireStatus(t, rec, http.StatusNotFound)
 
 	rec = postForm(t, mux, "/remove/42", nil)
