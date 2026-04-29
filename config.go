@@ -24,7 +24,7 @@ type postgresConfig struct {
 func loadConfig() config {
 	return config{
 		serverAddr: getEnv("SERVER_ADDR", ":8080"),
-		store:      getEnv("TODO_STORE", "memory"),
+		store:      getEnv("TODO_STORE", "postgres"),
 		postgres: postgresConfig{
 			host:     getEnv("POSTGRES_HOST", "localhost"),
 			port:     getEnv("POSTGRES_PORT", "5432"),

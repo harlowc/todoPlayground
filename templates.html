@@ -12,6 +12,10 @@
     .view-nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
     .view-nav a { padding: 5px 10px; border: 1px solid #d1d5db; border-radius: 4px; color: #374151; font-size: 14px; text-decoration: none; }
     .view-nav a[aria-current="page"] { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+    .filter-form { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(120px, 0.8fr) minmax(120px, 0.7fr) auto auto; gap: 8px; margin-bottom: 16px; }
+    .filter-form input, .filter-form select { min-width: 0; width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px; background: #fff; }
+    .filter-form button, .clear-filter { padding: 8px 10px; border: 1px solid #4f46e5; border-radius: 4px; background: #4f46e5; color: #fff; font-size: 14px; text-decoration: none; cursor: pointer; text-align: center; }
+    .clear-filter { border-color: #6b7280; background: #fff; color: #374151; }
     .edit-form { display: flex; align-items: center; gap: 8px; width: 100%; }
     .add-form input, .add-form select, .add-form textarea { min-width: 0; width: 100%; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
     .add-form .text-input { grid-column: 1 / -1; }
@@ -35,9 +39,11 @@
     .todo-menu-actions { position: absolute; z-index: 2; top: 28px; left: 0; display: flex; flex-direction: column; gap: 4px; min-width: 150px; padding: 6px; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; box-shadow: 0 8px 20px rgba(0,0,0,0.12); }
     .todo-menu-actions button { display: block; width: 100%; padding: 6px 8px; background: none; border: 0; color: #374151; cursor: pointer; font-size: 14px; text-align: left; text-decoration: none; }
     .todo-menu-actions button:hover, .todo-menu-actions a:hover { background: #f3f4f6; }
-    .edit-btn { position: absolute; right: 42px; bottom: 8px; padding: 5px 10px; background: none; border: 1px solid #6b7280; color: #6b7280; border-radius: 4px; cursor: pointer; font-size: 14px; text-decoration: none; }
+    .edit-btn { position: absolute; right: 16px; bottom: 8px; padding: 5px 10px; background: none; border: 1px solid #6b7280; color: #6b7280; border-radius: 4px; cursor: pointer; font-size: 14px; text-decoration: none; }
     .remove-form { position: absolute; top: 8px; right: 8px; }
+    .archive-form { position: absolute; right: 16px; bottom: 8px; }
     .remove-btn { width: 24px; height: 24px; padding: 0; background: none; border: 1px solid #e53e3e; color: #e53e3e; border-radius: 999px; cursor: pointer; font-size: 14px; line-height: 1; }
+    .archive-btn { padding: 5px 10px; background: none; border: 1px solid #6b7280; color: #6b7280; border-radius: 4px; cursor: pointer; font-size: 14px; }
     .cancel-btn { padding: 6px 12px; background: none; border: 1px solid #6b7280; color: #6b7280; border-radius: 4px; cursor: pointer; font-size: 14px; text-decoration: none; }
     .remove-btn:hover { background: #e53e3e; color: #fff; }
     .edit-btn:hover { background: #f3f4f6; }
@@ -48,12 +54,14 @@
     .edit-category-input, .edit-priority-input { padding: 6px 10px; border: 1px solid #4f46e5; border-radius: 4px; font-size: 16px; flex: 0 0 120px; min-width: 0; }
     .edit-date-input { padding: 6px 10px; border: 1px solid #4f46e5; border-radius: 4px; font-size: 16px; flex: 0 0 150px; min-width: 0; }
     .edit-notes-input { padding: 6px 10px; border: 1px solid #4f46e5; border-radius: 4px; font-size: 16px; flex: 1 1 100%; min-height: 72px; resize: vertical; }
-    @media (max-width: 760px) {
+    @media (max-width: 560px) {
       .add-form { grid-template-columns: 1fr 1fr; }
       .add-form .text-input, .add-form .notes-input, .add-form button { grid-column: 1 / -1; }
     }
     @media (max-width: 520px) {
       body { margin: 32px auto; padding: 0 14px; }
+      .filter-form { grid-template-columns: 1fr 1fr; }
+      .filter-form input[type="search"] { grid-column: 1 / -1; }
       .add-form { grid-template-columns: 1fr; }
       .todo-item { align-items: flex-start; flex-wrap: wrap; }
       .edit-form { flex-wrap: wrap; }
@@ -80,7 +88,22 @@
     <a href="/?view=active"{{if eq .View "active"}} aria-current="page"{{end}}>Active</a>
     <a href="/?view=completed"{{if eq .View "completed"}} aria-current="page"{{end}}>Completed</a>
     <a href="/?view=scheduled"{{if eq .View "scheduled"}} aria-current="page"{{end}}>Scheduled</a>
+    <a href="/?view=today"{{if eq .View "today"}} aria-current="page"{{end}}>Today</a>
+    <a href="/?view=upcoming"{{if eq .View "upcoming"}} aria-current="page"{{end}}>Upcoming</a>
   </nav>
+  <form class="filter-form" method="get" action="/">
+    {{if ne .View "all"}}<input type="hidden" name="view" value="{{.View}}">{{end}}
+    <input type="search" name="q" value="{{.Search}}" placeholder="Search" aria-label="Search todos">
+    <input class="filter-category-input" name="category" value="{{.CategoryFilter}}" type="text" placeholder="Category" aria-label="Filter by category">
+    <select name="priority" aria-label="Filter by priority">
+      <option value="">Priority</option>
+      <option value="low"{{if eq .PriorityFilter "low"}} selected{{end}}>Low</option>
+      <option value="normal"{{if eq .PriorityFilter "normal"}} selected{{end}}>Normal</option>
+      <option value="high"{{if eq .PriorityFilter "high"}} selected{{end}}>High</option>
+    </select>
+    <button type="submit">filter</button>
+    <a class="clear-filter" href="{{if eq .View "all"}}/{{else}}/?view={{.View}}{{end}}">clear</a>
+  </form>
   {{template "add-form" .}}
   <ul id="todo-list">
     {{range .Todos}}
@@ -127,8 +150,9 @@
       <details class="todo-menu">
         <summary aria-label="More actions for {{.Text}}">&#9662;</summary>
         <div class="todo-menu-actions">
-          <form hx-post="/done-tomorrow/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML" method="post">
-            <button>done + tomorrow</button>
+          <form hx-post="/done-tomorrow/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML" method="post"{{if .OfferNextWeekday}} hx-confirm="{{.NextWeekdayPrompt}}"{{end}}>
+            {{if .OfferNextWeekday}}<input type="hidden" name="next_weekday" value="on">{{end}}
+            <button>{{if .OfferNextWeekday}}done + next weekday{{else}}done + tomorrow{{end}}</button>
           </form>
         </div>
       </details>
@@ -145,7 +169,13 @@
       <form class="remove-form" hx-post="/remove/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML" hx-confirm="Remove {{.Text}}?" method="post">
         <button class="remove-btn" aria-label="Remove {{.Text}}">x</button>
       </form>
+      {{if .Completed}}
+      <form class="archive-form" hx-post="/archive/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML" hx-confirm="Archive {{.Text}}?" method="post">
+        <button class="archive-btn" aria-label="Archive {{.Text}}">archive</button>
+      </form>
+      {{else}}
       <a href="javascript:void(0)" class="edit-btn" hx-get="/edit/{{.ID}}" hx-target="#todo-{{.ID}}" hx-swap="outerHTML">edit</a>
+      {{end}}
     </li>
 {{end}}
 

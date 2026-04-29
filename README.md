@@ -1,15 +1,18 @@
 # todoPlayground
 
-A small Go and HTMX todo playground. It renders a server-side HTML page, then uses HTMX requests to add, edit, update, cancel, complete, recreate for tomorrow, and remove todos without a full page refresh. Todos can also have optional due dates, categories, priorities, notes, and simple views for all, active, completed, and scheduled tasks.
+A small Go and HTMX todo playground. It renders a server-side HTML page, then uses HTMX requests to add, edit, update, cancel, complete, archive, recreate for tomorrow, and remove todos without a full page refresh. Todos can also have optional due dates, categories, priorities, notes, search, and simple views for all, active, completed, scheduled, today, and upcoming tasks.
 
 ## Requirements
 
 - Go 1.26.2 or newer
+- Docker with Docker Compose for local Postgres
 
 ## Run
 
+To start the app and Dockerized Postgres together for local development:
+
 ```sh
-go run .
+make dev
 ```
 
 Then open:
@@ -18,33 +21,31 @@ Then open:
 http://localhost:8080
 ```
 
-To start the app and Dockerized Postgres together for local development:
-
-```sh
-make dev
-```
-
-This starts the `postgres` service, waits for it to become healthy, then runs the Go app with `TODO_STORE=postgres`.
+This starts the `postgres` service, waits for it to become healthy, then runs the Go app against Postgres.
 Press `Ctrl-C` to stop the Go app. Run `make postgres-down` when you want to stop the Postgres container too.
 
 The app can read its server and Postgres settings from environment variables:
 
 - `SERVER_ADDR` default: `:8080`
-- `TODO_STORE` default: `memory`
+- `TODO_STORE` default: `postgres`
 - `POSTGRES_HOST` default: `localhost`
 - `POSTGRES_PORT` default: `5432`
 - `POSTGRES_DB` default: `todo_playground`
 - `POSTGRES_USER` default: `todo_user`
-- `POSTGRES_PASSWORD` required when `TODO_STORE=postgres`
+- `POSTGRES_PASSWORD` required
 - `POSTGRES_SSLMODE` default: `disable`
+
+`TODO_STORE` is kept as a configuration switch, but the application runtime currently supports Postgres only.
 
 ## Local Postgres
 
 To start only the local Postgres container:
 
 ```sh
-make postgres-up
+POSTGRES_PASSWORD=replace-with-a-local-secret make postgres-up
 ```
+
+If you use `make dev`, `scripts/dev` loads `.env` before starting Docker Compose, so you can keep the password there for normal local development.
 
 To stop it and remove the Compose network:
 
@@ -58,19 +59,15 @@ The container exposes Postgres on `localhost:5432` with:
 - user: `todo_user`
 - password: whatever you set in your local `.env` file or shell as `POSTGRES_PASSWORD`
 
-By default the app still uses in-memory storage. To run it against Postgres:
+To run the app manually against Postgres:
 
 ```sh
-TODO_STORE=postgres go run .
+POSTGRES_PASSWORD=replace-with-a-local-secret TODO_STORE=postgres go run .
 ```
 
 ## Example Env File
 
-You can keep local settings in a `.env` file. That file is ignored by Git. Start from the committed template, then choose your own local password:
-
-```sh
-cp .env.example .env
-```
+You can keep local settings in a `.env` file. That file is ignored by Git.
 
 A local setup should look like:
 
@@ -87,16 +84,24 @@ POSTGRES_SSLMODE=disable
 
 ## Postgres Check
 
-To verify the app can reach Postgres and apply the initial schema migration:
+To verify the app can reach Postgres and apply all schema migrations:
 
 ```sh
-make test-db
+POSTGRES_PASSWORD=replace-with-a-local-secret make test-db
 ```
 
-If the Go build cache is not writable in your environment, use:
+`make test-db` starts an isolated Postgres container on `POSTGRES_TEST_PORT`, defaulting to `55432`, runs the full Go test suite with `RUN_DB_TESTS=1`, then removes the test database volume.
+
+If you already have a Postgres database running with the expected schema settings, you can run the DB tests directly:
 
 ```sh
-RUN_DB_TESTS=1 GOCACHE=/tmp/test1-go-cache go test ./...
+RUN_DB_TESTS=1 POSTGRES_PASSWORD=replace-with-a-local-secret go test ./...
+```
+
+If the Go build cache is not writable in your environment, add a local or temporary cache:
+
+```sh
+RUN_DB_TESTS=1 POSTGRES_PASSWORD=replace-with-a-local-secret GOCACHE=/tmp/test1-go-cache go test ./...
 ```
 
 ## Test
@@ -105,13 +110,25 @@ RUN_DB_TESTS=1 GOCACHE=/tmp/test1-go-cache go test ./...
 make test
 ```
 
+`make test` runs the fast non-DB suite. It skips the Postgres integration tests unless `RUN_DB_TESTS=1` is set.
+
 If the Go build cache is not writable in your environment, use a local or temporary cache:
 
 ```sh
 GOCACHE=/tmp/test1-go-cache go test ./...
 ```
 
+## Current Features
+
+- Add, edit, complete, archive, remove, and recreate todos.
+- Store due dates, categories, priorities, and notes in Postgres.
+- View all, active, completed, scheduled, today, and upcoming todos.
+- Filter by category and priority.
+- Search todo text, category, and notes.
+- Hide archived completed todos from the normal views.
+- Offer the next weekday when recreating a task would otherwise land on a weekend.
+
 ## Notes
 
-Use `TODO_STORE=memory` for ephemeral local state or `TODO_STORE=postgres` for Dockerized Postgres-backed persistence.
+The app is intended to run with Dockerized Postgres-backed persistence.
 HTMX is vendored in `static/htmx.min.js` so the app does not need to load it from a CDN at runtime.

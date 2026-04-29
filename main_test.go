@@ -119,11 +119,23 @@ func TestAddFormUsesResponsiveGridLayout(t *testing.T) {
 	requireContains(t, body, `.add-form .text-input { grid-column: 1 / -1; }`)
 	requireContains(t, body, `.add-form .notes-input { grid-column: 1 / -1;`)
 	requireContains(t, body, `.add-form button { grid-column: 1 / -1;`)
-	requireContains(t, body, `@media (max-width: 760px)`)
+	requireContains(t, body, `@media (max-width: 560px)`)
 	requireContains(t, body, `.add-form { grid-template-columns: 1fr 1fr; }`)
 	requireContains(t, body, `@media (max-width: 520px)`)
 	requireContains(t, body, `.add-form { grid-template-columns: 1fr; }`)
 	requireContains(t, body, `class="text-input"`)
+}
+
+func TestTodoItemActionsUseSeparateCorners(t *testing.T) {
+	mux := newTestMux()
+
+	rec := get(t, mux, "/")
+	requireStatus(t, rec, http.StatusOK)
+
+	body := rec.Body.String()
+	requireContains(t, body, `.remove-form { position: absolute; top: 8px; right: 8px; }`)
+	requireContains(t, body, `.edit-btn { position: absolute; right: 16px; bottom: 8px;`)
+	requireContains(t, body, `.archive-form { position: absolute; right: 16px; bottom: 8px; }`)
 }
 
 func TestHomeUsesLocalHTMXAsset(t *testing.T) {
@@ -417,6 +429,132 @@ func TestTodoViewsFilterActiveCompletedAndScheduledTodos(t *testing.T) {
 
 	rec = get(t, mux, "/?view=not-real")
 	requireStatus(t, rec, http.StatusBadRequest)
+}
+
+func TestTodoDueDatePlanningViews(t *testing.T) {
+	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	mux := newTestMuxWithToday(newMemoryStore(), today)
+
+	rec := postForm(t, mux, "/add", url.Values{
+		"text":     {"Today task"},
+		"due_date": {"2026-04-29"},
+	})
+	requireStatus(t, rec, http.StatusOK)
+
+	rec = postForm(t, mux, "/add", url.Values{
+		"text":     {"Upcoming task"},
+		"due_date": {"2026-04-30"},
+	})
+	requireStatus(t, rec, http.StatusOK)
+
+	rec = postForm(t, mux, "/add", url.Values{"text": {"Someday task"}})
+	requireStatus(t, rec, http.StatusOK)
+
+	rec = get(t, mux, "/?view=today")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `aria-current="page">Today</a>`)
+	requireContains(t, rec.Body.String(), "Today task")
+	requireNotContains(t, rec.Body.String(), "Upcoming task")
+	requireNotContains(t, rec.Body.String(), "Someday task")
+
+	rec = get(t, mux, "/?view=upcoming")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `aria-current="page">Upcoming</a>`)
+	requireContains(t, rec.Body.String(), "Upcoming task")
+	requireNotContains(t, rec.Body.String(), "Today task")
+	requireNotContains(t, rec.Body.String(), "Someday task")
+}
+
+func TestTodoFiltersAndSearch(t *testing.T) {
+	mux := newTestMux()
+
+	rec := postForm(t, mux, "/add", url.Values{
+		"text":     {"Write launch brief"},
+		"category": {"Work"},
+		"priority": {"high"},
+		"notes":    {"Includes rollout checklist."},
+	})
+	requireStatus(t, rec, http.StatusOK)
+
+	rec = postForm(t, mux, "/add", url.Values{
+		"text":     {"Buy groceries"},
+		"category": {"Home"},
+		"priority": {"low"},
+		"notes":    {"Fruit and coffee."},
+	})
+	requireStatus(t, rec, http.StatusOK)
+
+	rec = postForm(t, mux, "/add", url.Values{
+		"text":     {"Read release notes"},
+		"category": {"Work"},
+		"priority": {"normal"},
+		"notes":    {"Searchable documentation."},
+	})
+	requireStatus(t, rec, http.StatusOK)
+
+	rec = get(t, mux, "/?category=Work")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `name="category" value="Work"`)
+	requireContains(t, rec.Body.String(), "Write launch brief")
+	requireContains(t, rec.Body.String(), "Read release notes")
+	requireNotContains(t, rec.Body.String(), "Buy groceries")
+
+	rec = get(t, mux, "/?priority=high")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `<option value="high" selected>High</option>`)
+	requireContains(t, rec.Body.String(), "Write launch brief")
+	requireNotContains(t, rec.Body.String(), "Read release notes")
+	requireNotContains(t, rec.Body.String(), "Buy groceries")
+
+	rec = get(t, mux, "/?q=CHECKLIST")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `name="q" value="CHECKLIST"`)
+	requireContains(t, rec.Body.String(), "Write launch brief")
+	requireNotContains(t, rec.Body.String(), "Read release notes")
+	requireNotContains(t, rec.Body.String(), "Buy groceries")
+}
+
+func TestArchiveCompletedTodoHidesItFromNormalViews(t *testing.T) {
+	mux := newTestMux()
+
+	rec := postForm(t, mux, "/add", url.Values{"text": {"Old completed task"}})
+	requireStatus(t, rec, http.StatusOK)
+	rec = postForm(t, mux, "/completed/1", url.Values{"completed": {"on"}})
+	requireStatus(t, rec, http.StatusOK)
+
+	rec = get(t, mux, "/?view=completed")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "Old completed task")
+	requireContains(t, rec.Body.String(), `hx-post="/archive/1"`)
+	requireContains(t, rec.Body.String(), `aria-label="Archive Old completed task"`)
+
+	rec = postForm(t, mux, "/archive/1", nil)
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `hx-swap-oob="remove"`)
+
+	rec = get(t, mux, "/")
+	requireStatus(t, rec, http.StatusOK)
+	requireNotContains(t, rec.Body.String(), "Old completed task")
+
+	rec = get(t, mux, "/?view=completed")
+	requireStatus(t, rec, http.StatusOK)
+	requireNotContains(t, rec.Body.String(), "Old completed task")
+}
+
+func TestDoneTomorrowOffersNextWeekdayWhenTomorrowIsWeekend(t *testing.T) {
+	friday := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	mux := newTestMuxWithToday(newMemoryStore(), friday)
+
+	rec := postForm(t, mux, "/add", url.Values{"text": {"Weekly review"}})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `name="next_weekday" value="on"`)
+	requireContains(t, rec.Body.String(), `hx-confirm="Tomorrow is Saturday. Recreate for Monday instead?"`)
+
+	rec = postForm(t, mux, "/done-tomorrow/1", url.Values{"next_weekday": {"on"}})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "Weekly review")
+	requireContains(t, rec.Body.String(), "Due 2026-05-04")
+	requireContains(t, rec.Body.String(), `id="todo-2"`)
 }
 
 func TestTodoDueDateIsOptionalAndValidated(t *testing.T) {

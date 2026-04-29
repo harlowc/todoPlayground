@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,8 @@ const (
 	viewActive    = "active"
 	viewCompleted = "completed"
 	viewScheduled = "scheduled"
+	viewToday     = "today"
+	viewUpcoming  = "upcoming"
 )
 
 type app struct {
@@ -28,8 +31,17 @@ type app struct {
 }
 
 type pageData struct {
-	Todos []todo
-	View  string
+	Todos          []todo
+	View           string
+	CategoryFilter string
+	PriorityFilter string
+	Search         string
+}
+
+type pageFilters struct {
+	Category string
+	Priority string
+	Search   string
 }
 
 func newAppWithToday(store todoStore, today func() time.Time) *app {
@@ -50,6 +62,11 @@ func (a *app) home(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown view", http.StatusBadRequest)
 		return
 	}
+	filters, ok, message := parsePageFilters(r)
+	if !ok {
+		http.Error(w, message, http.StatusBadRequest)
+		return
+	}
 
 	todos, err := a.store.List()
 	if err != nil {
@@ -57,7 +74,13 @@ func (a *app) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := pageData{Todos: filterTodos(todos, view), View: view}
+	data := pageData{
+		Todos:          a.prepareTodos(filterTodos(todos, view, filters, a.today())),
+		View:           view,
+		CategoryFilter: filters.Category,
+		PriorityFilter: filters.Priority,
+		Search:         filters.Search,
+	}
 	if err := tmpl.ExecuteTemplate(w, "base", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -86,7 +109,7 @@ func (a *app) add(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	if err := tmpl.ExecuteTemplate(w, "todo-item", t); err != nil {
+	if err := tmpl.ExecuteTemplate(w, "todo-item", a.prepareTodo(t)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -164,7 +187,7 @@ func (a *app) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	if err := tmpl.ExecuteTemplate(w, "todo-item", updated); err != nil {
+	if err := tmpl.ExecuteTemplate(w, "todo-item", a.prepareTodo(updated)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -195,7 +218,7 @@ func (a *app) cancel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	if err := tmpl.ExecuteTemplate(w, "todo-item", t); err != nil {
+	if err := tmpl.ExecuteTemplate(w, "todo-item", a.prepareTodo(t)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -254,9 +277,14 @@ func (a *app) doneTomorrow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	dueDate := tomorrow(a.today())
+	if r.FormValue("next_weekday") == "on" {
+		dueDate = nextWeekday(a.today())
+	}
+
 	recreated, err := a.store.Create(todoInput{
 		Text:     current.Text,
-		DueDate:  tomorrow(a.today()),
+		DueDate:  dueDate,
 		Category: current.Category,
 		Priority: current.Priority,
 		Notes:    current.Notes,
@@ -267,7 +295,7 @@ func (a *app) doneTomorrow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	if err := tmpl.ExecuteTemplate(w, "todo-item", recreated); err != nil {
+	if err := tmpl.ExecuteTemplate(w, "todo-item", a.prepareTodo(recreated)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -299,9 +327,34 @@ func (a *app) setCompleted(w http.ResponseWriter, r *http.Request) {
 		renderRemoveTodo(w, id)
 		return
 	}
-	if err := tmpl.ExecuteTemplate(w, "todo-item", t); err != nil {
+	if err := tmpl.ExecuteTemplate(w, "todo-item", a.prepareTodo(t)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func (a *app) archive(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id, ok := parseTodoID(w, r)
+	if !ok {
+		return
+	}
+
+	_, found, err := a.store.Archive(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	renderRemoveTodo(w, id)
 }
 
 func renderRemoveTodo(w http.ResponseWriter, id int) {
@@ -324,36 +377,93 @@ func parseView(r *http.Request) (string, bool) {
 		return viewAll, true
 	}
 	switch view {
-	case viewAll, viewActive, viewCompleted, viewScheduled:
+	case viewAll, viewActive, viewCompleted, viewScheduled, viewToday, viewUpcoming:
 		return view, true
 	default:
 		return "", false
 	}
 }
 
-func filterTodos(todos []todo, view string) []todo {
-	if view == viewAll {
-		return todos
+func parsePageFilters(r *http.Request) (pageFilters, bool, string) {
+	filters := pageFilters{
+		Category: strings.TrimSpace(r.URL.Query().Get("category")),
+		Priority: strings.TrimSpace(r.URL.Query().Get("priority")),
+		Search:   strings.TrimSpace(r.URL.Query().Get("q")),
 	}
+	if filters.Priority != "" && !validPriority(filters.Priority) {
+		return pageFilters{}, false, "priority filter must be low, normal, or high"
+	}
+	return filters, true, ""
+}
 
+func filterTodos(todos []todo, view string, filters pageFilters, today time.Time) []todo {
 	filtered := make([]todo, 0, len(todos))
 	for _, t := range todos {
-		switch view {
-		case viewActive:
-			if !t.Completed {
-				filtered = append(filtered, t)
-			}
-		case viewCompleted:
-			if t.Completed {
-				filtered = append(filtered, t)
-			}
-		case viewScheduled:
-			if !t.Completed && t.DueDate != "" {
-				filtered = append(filtered, t)
-			}
+		if t.Archived {
+			continue
 		}
+		if !matchesView(t, view, today) {
+			continue
+		}
+		if !matchesFilters(t, filters) {
+			continue
+		}
+		filtered = append(filtered, t)
 	}
 	return filtered
+}
+
+func matchesView(t todo, view string, today time.Time) bool {
+	switch view {
+	case viewAll:
+		return true
+	case viewActive:
+		return !t.Completed
+	case viewCompleted:
+		return t.Completed
+	case viewScheduled:
+		return !t.Completed && t.DueDate != ""
+	case viewToday:
+		return !t.Completed && sameDate(t.DueDate, today)
+	case viewUpcoming:
+		return !t.Completed && futureDate(t.DueDate, today)
+	default:
+		return false
+	}
+}
+
+func matchesFilters(t todo, filters pageFilters) bool {
+	if filters.Category != "" && !strings.EqualFold(t.Category, filters.Category) {
+		return false
+	}
+	if filters.Priority != "" && t.Priority != filters.Priority {
+		return false
+	}
+	if filters.Search != "" {
+		query := strings.ToLower(filters.Search)
+		searchable := strings.ToLower(strings.Join([]string{t.Text, t.Category, t.Notes}, " "))
+		if !strings.Contains(searchable, query) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameDate(dueDate string, today time.Time) bool {
+	parsed, err := time.Parse("2006-01-02", dueDate)
+	if err != nil {
+		return false
+	}
+	return parsed.Format("2006-01-02") == today.Format("2006-01-02")
+}
+
+func futureDate(dueDate string, today time.Time) bool {
+	parsed, err := time.Parse("2006-01-02", dueDate)
+	if err != nil {
+		return false
+	}
+	todayDate := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, parsed.Location())
+	return parsed.After(todayDate)
 }
 
 func parseTodoInput(r *http.Request) (todoInput, bool, string) {
@@ -424,6 +534,44 @@ func tomorrow(today time.Time) string {
 	return today.AddDate(0, 0, 1).Format("2006-01-02")
 }
 
+func nextWeekday(today time.Time) string {
+	next := today.AddDate(0, 0, 1)
+	for next.Weekday() == time.Saturday || next.Weekday() == time.Sunday {
+		next = next.AddDate(0, 0, 1)
+	}
+	return next.Format("2006-01-02")
+}
+
+func tomorrowFallsOnWeekend(today time.Time) bool {
+	next := today.AddDate(0, 0, 1)
+	return next.Weekday() == time.Saturday || next.Weekday() == time.Sunday
+}
+
+func nextWeekdayPrompt(today time.Time) string {
+	tomorrowDate := today.AddDate(0, 0, 1)
+	next, err := time.Parse("2006-01-02", nextWeekday(today))
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("Tomorrow is %s. Recreate for %s instead?", tomorrowDate.Weekday(), next.Weekday())
+}
+
+func (a *app) prepareTodos(todos []todo) []todo {
+	prepared := make([]todo, len(todos))
+	for i, t := range todos {
+		prepared[i] = a.prepareTodo(t)
+	}
+	return prepared
+}
+
+func (a *app) prepareTodo(t todo) todo {
+	if !t.Completed && tomorrowFallsOnWeekend(a.today()) {
+		t.OfferNextWeekday = true
+		t.NextWeekdayPrompt = nextWeekdayPrompt(a.today())
+	}
+	return t
+}
+
 func editErrorTarget(id int) string {
 	return fmt.Sprintf("#edit-error-%d", id)
 }
@@ -448,6 +596,7 @@ func newMuxWithToday(store todoStore, today func() time.Time) http.Handler {
 	mux.HandleFunc("POST /add", app.add)
 	mux.HandleFunc("POST /done-tomorrow/{id}", app.doneTomorrow)
 	mux.HandleFunc("POST /remove/{id}", app.remove)
+	mux.HandleFunc("POST /archive/{id}", app.archive)
 	mux.HandleFunc("POST /completed/{id}", app.setCompleted)
 	mux.HandleFunc("GET /edit/{id}", app.edit)
 	mux.HandleFunc("POST /update/{id}", app.update)
@@ -493,8 +642,6 @@ func sameOriginRequest(r *http.Request) bool {
 
 func newConfiguredStore(cfg config) (todoStore, error) {
 	switch cfg.store {
-	case "memory":
-		return newMemoryStore(), nil
 	case "postgres":
 		if cfg.postgres.password == "" {
 			return nil, fmt.Errorf("POSTGRES_PASSWORD is required when TODO_STORE=postgres")
@@ -519,7 +666,7 @@ func newConfiguredStore(cfg config) (todoStore, error) {
 
 		return newPostgresStore(db), nil
 	default:
-		return nil, fmt.Errorf("unsupported TODO_STORE %q", cfg.store)
+		return nil, fmt.Errorf("unsupported TODO_STORE %q; use \"postgres\"", cfg.store)
 	}
 }
 

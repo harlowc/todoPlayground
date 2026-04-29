@@ -17,8 +17,8 @@ func TestLoadConfigDefaults(t *testing.T) {
 	if cfg.serverAddr != ":8080" {
 		t.Fatalf("serverAddr = %q, want %q", cfg.serverAddr, ":8080")
 	}
-	if cfg.store != "memory" {
-		t.Fatalf("store = %q, want %q", cfg.store, "memory")
+	if cfg.store != "postgres" {
+		t.Fatalf("store = %q, want %q", cfg.store, "postgres")
 	}
 	if cfg.postgres.host != "localhost" {
 		t.Fatalf("host = %q, want %q", cfg.postgres.host, "localhost")
@@ -37,6 +37,16 @@ func TestLoadConfigDefaults(t *testing.T) {
 	}
 	if cfg.postgres.sslMode != "disable" {
 		t.Fatalf("sslMode = %q, want %q", cfg.postgres.sslMode, "disable")
+	}
+}
+
+func TestConfiguredStoreOnlySupportsPostgres(t *testing.T) {
+	_, err := newConfiguredStore(config{store: "memory"})
+	if err == nil {
+		t.Fatal("newConfiguredStore() error = nil, want unsupported store error")
+	}
+	if err.Error() != `unsupported TODO_STORE "memory"; use "postgres"` {
+		t.Fatalf("newConfiguredStore() error = %q, want unsupported memory error", err)
 	}
 }
 

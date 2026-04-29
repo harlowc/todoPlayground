@@ -61,7 +61,7 @@ func TestPostgresConnectionAndMigrations(t *testing.T) {
 		t.Fatal("todos.due_date column does not exist after migrations")
 	}
 
-	for _, column := range []string{"category", "priority", "notes"} {
+	for _, column := range []string{"category", "priority", "notes", "archived"} {
 		var exists bool
 		err = db.QueryRowContext(ctx, `
 			SELECT EXISTS (
@@ -281,6 +281,53 @@ func TestPostgresStorePersistsCategoryPriorityAndNotesAcrossReload(t *testing.T)
 	}
 	if updated.Category != "Ops" || updated.Priority != "low" || updated.Notes != "Share checklist after standup." {
 		t.Fatalf("updated = %#v, want updated category, priority, and notes", updated)
+	}
+}
+
+func TestPostgresStorePersistsArchiveAcrossReload(t *testing.T) {
+	if getEnv("RUN_DB_TESTS", "") != "1" {
+		t.Skip("set RUN_DB_TESTS=1 to run Postgres integration tests")
+	}
+
+	cfg := loadConfig()
+	db := openTestDB(t, cfg.postgres)
+	defer db.Close()
+
+	resetPostgresTodos(t, db)
+
+	store := newPostgresStore(db)
+	created, err := store.Create(todoInput{Text: "Clean completed list", Priority: "normal"})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if _, found, err := store.SetCompleted(created.ID, true); err != nil {
+		t.Fatalf("SetCompleted() error = %v", err)
+	} else if !found {
+		t.Fatal("SetCompleted() did not find created todo")
+	}
+
+	archived, found, err := store.Archive(created.ID)
+	if err != nil {
+		t.Fatalf("Archive() error = %v", err)
+	}
+	if !found {
+		t.Fatal("Archive() did not find completed todo")
+	}
+	if !archived.Archived {
+		t.Fatalf("archived.Archived = false, want true")
+	}
+
+	reloaded := newPostgresStore(db)
+	got, found, err := reloaded.Get(created.ID)
+	if err != nil {
+		t.Fatalf("Get() after archive error = %v", err)
+	}
+	if !found {
+		t.Fatal("Get() after archive did not find todo")
+	}
+	if !got.Archived {
+		t.Fatalf("got.Archived = false, want true")
 	}
 }
 
