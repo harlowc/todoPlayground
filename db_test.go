@@ -45,6 +45,21 @@ func TestPostgresConnectionAndMigrations(t *testing.T) {
 	if !exists {
 		t.Fatal("todos table does not exist after migrations")
 	}
+
+	var hasDueDate bool
+	err = db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.columns
+			WHERE table_schema = 'public' AND table_name = 'todos' AND column_name = 'due_date'
+		)
+	`).Scan(&hasDueDate)
+	if err != nil {
+		t.Fatalf("check todos due_date column error = %v", err)
+	}
+	if !hasDueDate {
+		t.Fatal("todos.due_date column does not exist after migrations")
+	}
 }
 
 func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
@@ -59,12 +74,15 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 	resetPostgresTodos(t, db)
 
 	store := newPostgresStore(db)
-	created, err := store.Create("Write docs")
+	created, err := store.Create("Write docs", "")
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 	if created.Completed {
 		t.Fatal("created todo is completed, want incomplete by default")
+	}
+	if created.DueDate != "" {
+		t.Fatalf("created.DueDate = %q, want no due date by default", created.DueDate)
 	}
 
 	reloaded := newPostgresStore(db)
@@ -76,7 +94,7 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 		t.Fatalf("List() = %#v, want one persisted todo", todos)
 	}
 
-	updated, found, err := reloaded.Update(created.ID, "Ship docs")
+	updated, found, err := reloaded.Update(created.ID, "Ship docs", "")
 	if err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
@@ -137,6 +155,61 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 	}
 	if len(todos) != 0 {
 		t.Fatalf("final List() = %#v, want no todos after delete", todos)
+	}
+}
+
+func TestPostgresStorePersistsDueDateAcrossReload(t *testing.T) {
+	if getEnv("RUN_DB_TESTS", "") != "1" {
+		t.Skip("set RUN_DB_TESTS=1 to run Postgres integration tests")
+	}
+
+	cfg := loadConfig()
+	db := openTestDB(t, cfg.postgres)
+	defer db.Close()
+
+	resetPostgresTodos(t, db)
+
+	store := newPostgresStore(db)
+	created, err := store.Create("Pay rent", "2099-01-02")
+	if err != nil {
+		t.Fatalf("Create() with due date error = %v", err)
+	}
+	if created.DueDate != "2099-01-02" {
+		t.Fatalf("created.DueDate = %q, want %q", created.DueDate, "2099-01-02")
+	}
+
+	reloaded := newPostgresStore(db)
+	got, found, err := reloaded.Get(created.ID)
+	if err != nil {
+		t.Fatalf("Get() after create error = %v", err)
+	}
+	if !found {
+		t.Fatal("Get() after create did not find todo")
+	}
+	if got.DueDate != "2099-01-02" {
+		t.Fatalf("got.DueDate = %q, want %q", got.DueDate, "2099-01-02")
+	}
+
+	updated, found, err := reloaded.Update(created.ID, "Pay rent online", "2099-02-03")
+	if err != nil {
+		t.Fatalf("Update() with due date error = %v", err)
+	}
+	if !found {
+		t.Fatal("Update() with due date did not find todo")
+	}
+	if updated.DueDate != "2099-02-03" {
+		t.Fatalf("updated.DueDate = %q, want %q", updated.DueDate, "2099-02-03")
+	}
+
+	withoutDueDate, found, err := reloaded.Update(created.ID, "Pay rent later", "")
+	if err != nil {
+		t.Fatalf("Update() clearing due date error = %v", err)
+	}
+	if !found {
+		t.Fatal("Update() clearing due date did not find todo")
+	}
+	if withoutDueDate.DueDate != "" {
+		t.Fatalf("withoutDueDate.DueDate = %q, want no due date", withoutDueDate.DueDate)
 	}
 }
 

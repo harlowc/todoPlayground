@@ -6,16 +6,35 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestMux() http.Handler {
 	return newMux(newMemoryStore())
 }
 
+func newTestMuxWithToday(store todoStore, today time.Time) http.Handler {
+	return newMuxWithToday(store, func() time.Time {
+		return today
+	})
+}
+
 func postForm(t *testing.T, mux http.Handler, path string, values url.Values) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	return rec
+}
+
+func postFormWithHeaders(t *testing.T, mux http.Handler, path string, values url.Values, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(values.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	return rec
@@ -63,10 +82,24 @@ func TestAddRendersTodoAndResetsForm(t *testing.T) {
 	requireContains(t, body, `hx-get="/edit/1" hx-target="#todo-1" hx-swap="outerHTML"`)
 	requireContains(t, body, `hx-swap-oob="outerHTML"`)
 	requireContains(t, body, `placeholder="Add a todo..."`)
+	requireContains(t, body, `id="add-error"`)
 
 	rec = get(t, mux, "/")
 	requireStatus(t, rec, http.StatusOK)
 	requireContains(t, rec.Body.String(), "Buy milk")
+}
+
+func TestHomeAllowsHTMXValidationErrorsToRender(t *testing.T) {
+	mux := newTestMux()
+
+	rec := get(t, mux, "/")
+	requireStatus(t, rec, http.StatusOK)
+
+	body := rec.Body.String()
+	requireContains(t, body, "htmx:beforeSwap")
+	requireContains(t, body, "document.addEventListener")
+	requireContains(t, body, `getResponseHeader("HX-Retarget")`)
+	requireContains(t, body, "shouldSwap = true")
 }
 
 func TestHomeUsesLocalHTMXAsset(t *testing.T) {
@@ -84,6 +117,35 @@ func TestHomeUsesLocalHTMXAsset(t *testing.T) {
 	requireContains(t, rec.Body.String(), "htmx")
 }
 
+func TestSecurityHeadersAreSet(t *testing.T) {
+	mux := newTestMux()
+
+	rec := get(t, mux, "/")
+	requireStatus(t, rec, http.StatusOK)
+
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+	if got := rec.Header().Get("X-Frame-Options"); got != "DENY" {
+		t.Fatalf("X-Frame-Options = %q, want DENY", got)
+	}
+}
+
+func TestCrossOriginPostsAreRejected(t *testing.T) {
+	mux := newTestMux()
+
+	rec := postFormWithHeaders(t, mux, "/add", url.Values{"text": {"Sneaky"}}, map[string]string{
+		"Origin": "http://evil.example",
+	})
+	requireStatus(t, rec, http.StatusForbidden)
+
+	rec = postFormWithHeaders(t, mux, "/add", url.Values{"text": {"Same origin"}}, map[string]string{
+		"Origin": "http://example.com",
+	})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "Same origin")
+}
+
 func TestTodoLifecycle(t *testing.T) {
 	mux := newTestMux()
 
@@ -95,6 +157,7 @@ func TestTodoLifecycle(t *testing.T) {
 	requireContains(t, rec.Body.String(), `value="Draft plan"`)
 	requireContains(t, rec.Body.String(), `hx-post="/update/1" hx-target="#todo-1" hx-swap="outerHTML"`)
 	requireContains(t, rec.Body.String(), `hx-get="/cancel/1" hx-target="#todo-1" hx-swap="outerHTML"`)
+	requireContains(t, rec.Body.String(), `id="edit-error-1"`)
 
 	rec = postForm(t, mux, "/update/1", url.Values{"text": {"Ship plan"}})
 	requireStatus(t, rec, http.StatusOK)
@@ -136,6 +199,113 @@ func TestTodoCompletionToggle(t *testing.T) {
 	requireStatus(t, rec, http.StatusOK)
 	requireNotContains(t, rec.Body.String(), `class="todo-item completed"`)
 	requireNotContains(t, rec.Body.String(), "checked")
+}
+
+func TestTodoDueDateLifecycle(t *testing.T) {
+	mux := newTestMux()
+
+	rec := postForm(t, mux, "/add", url.Values{
+		"text":     {"Pay rent"},
+		"due_date": {"2099-01-02"},
+	})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `datetime="2099-01-02"`)
+	requireContains(t, rec.Body.String(), "Due 2099-01-02")
+
+	rec = get(t, mux, "/edit/1")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), `type="date" name="due_date" value="2099-01-02"`)
+
+	rec = postForm(t, mux, "/update/1", url.Values{
+		"text":     {"Pay rent online"},
+		"due_date": {"2099-02-03"},
+	})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "Pay rent online")
+	requireContains(t, rec.Body.String(), `datetime="2099-02-03"`)
+	requireContains(t, rec.Body.String(), "Due 2099-02-03")
+
+	rec = get(t, mux, "/")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "Pay rent online")
+	requireContains(t, rec.Body.String(), "Due 2099-02-03")
+}
+
+func TestTodoDueDateIsOptionalAndValidated(t *testing.T) {
+	mux := newTestMux()
+
+	rec := postForm(t, mux, "/add", url.Values{"text": {"No date needed"}})
+	requireStatus(t, rec, http.StatusOK)
+	requireNotContains(t, rec.Body.String(), "todo-due-date")
+
+	rec = postForm(t, mux, "/add", url.Values{
+		"text":     {"Bad date"},
+		"due_date": {"next Friday"},
+	})
+	requireStatus(t, rec, http.StatusBadRequest)
+	requireContains(t, rec.Body.String(), "due date must use YYYY-MM-DD")
+	if got := rec.Header().Get("HX-Retarget"); got != "#add-error" {
+		t.Fatalf("HX-Retarget = %q, want #add-error", got)
+	}
+}
+
+func TestAddRejectsPastDueDate(t *testing.T) {
+	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	mux := newTestMuxWithToday(newMemoryStore(), today)
+
+	rec := postForm(t, mux, "/add", url.Values{
+		"text":     {"File report"},
+		"due_date": {"2026-04-28"},
+	})
+	requireStatus(t, rec, http.StatusBadRequest)
+	requireContains(t, rec.Body.String(), "due date cannot be before today")
+	if got := rec.Header().Get("HX-Retarget"); got != "#add-error" {
+		t.Fatalf("HX-Retarget = %q, want #add-error", got)
+	}
+	if got := rec.Header().Get("HX-Reswap"); got != "innerHTML" {
+		t.Fatalf("HX-Reswap = %q, want innerHTML", got)
+	}
+
+	rec = postForm(t, mux, "/add", url.Values{
+		"text":     {"File report"},
+		"due_date": {"2026-04-29"},
+	})
+	requireStatus(t, rec, http.StatusOK)
+}
+
+func TestUpdateOnlyRejectsPastDueDateWhenDateChanges(t *testing.T) {
+	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	store := newMemoryStore()
+	created, err := store.Create("Renew permit", "2026-04-28")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	mux := newTestMuxWithToday(store, today)
+
+	rec := postForm(t, mux, "/update/1", url.Values{
+		"text":     {"Renew permit online"},
+		"due_date": {created.DueDate},
+	})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "Renew permit online")
+	requireContains(t, rec.Body.String(), "Due 2026-04-28")
+
+	rec = postForm(t, mux, "/update/1", url.Values{
+		"text":     {"Renew permit soon"},
+		"due_date": {"2026-04-27"},
+	})
+	requireStatus(t, rec, http.StatusBadRequest)
+	requireContains(t, rec.Body.String(), "due date cannot be before today")
+	if got := rec.Header().Get("HX-Retarget"); got != "#edit-error-1" {
+		t.Fatalf("HX-Retarget = %q, want #edit-error-1", got)
+	}
+
+	rec = postForm(t, mux, "/update/1", url.Values{
+		"text":     {"Renew permit today"},
+		"due_date": {"2026-04-29"},
+	})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "Due 2026-04-29")
 }
 
 func TestTodoTextIsEscaped(t *testing.T) {

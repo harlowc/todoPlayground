@@ -6,18 +6,25 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
 
 var tmpl = template.Must(template.ParseFiles("templates.html"))
 
+const addErrorTarget = "#add-error"
+
 type app struct {
 	store todoStore
+	today func() time.Time
 }
 
-func newApp(store todoStore) *app {
-	return &app{store: store}
+func newAppWithToday(store todoStore, today func() time.Time) *app {
+	return &app{
+		store: store,
+		today: today,
+	}
 }
 
 func (a *app) home(w http.ResponseWriter, r *http.Request) {
@@ -45,11 +52,21 @@ func (a *app) add(w http.ResponseWriter, r *http.Request) {
 
 	text := r.FormValue("text")
 	if text == "" {
-		http.Error(w, "text required", http.StatusBadRequest)
+		renderValidationError(w, addErrorTarget, "text is required")
 		return
 	}
 
-	t, err := a.store.Create(text)
+	dueDate, ok, message := parseDueDate(r)
+	if !ok {
+		renderValidationError(w, addErrorTarget, message)
+		return
+	}
+	if ok, message := validateDueDateNotPast(dueDate, a.today()); !ok {
+		renderValidationError(w, addErrorTarget, message)
+		return
+	}
+
+	t, err := a.store.Create(text, dueDate)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -105,11 +122,31 @@ func (a *app) update(w http.ResponseWriter, r *http.Request) {
 
 	text := r.FormValue("text")
 	if text == "" {
-		http.Error(w, "text required", http.StatusBadRequest)
+		renderValidationError(w, editErrorTarget(id), "text is required")
 		return
 	}
 
-	updated, found, err := a.store.Update(id, text)
+	dueDate, ok, message := parseDueDate(r)
+	if !ok {
+		renderValidationError(w, editErrorTarget(id), message)
+		return
+	}
+
+	current, found, err := a.store.Get(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !found {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if ok, message := validateDueDateNotPast(dueDate, a.today()); dueDate != current.DueDate && !ok {
+		renderValidationError(w, editErrorTarget(id), message)
+		return
+	}
+
+	updated, found, err := a.store.Update(id, text, dueDate)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -219,9 +256,53 @@ func parseTodoID(w http.ResponseWriter, r *http.Request) (int, bool) {
 	return id, true
 }
 
-func newMux(store todoStore) *http.ServeMux {
-	app := newApp(store)
+func parseDueDate(r *http.Request) (string, bool, string) {
+	dueDate := r.FormValue("due_date")
+	if dueDate == "" {
+		return "", true, ""
+	}
 
+	if _, err := time.Parse("2006-01-02", dueDate); err != nil {
+		return "", false, "due date must use YYYY-MM-DD"
+	}
+	return dueDate, true, ""
+}
+
+func validateDueDateNotPast(dueDate string, today time.Time) (bool, string) {
+	if dueDate == "" {
+		return true, ""
+	}
+
+	parsedDueDate, err := time.Parse("2006-01-02", dueDate)
+	if err != nil {
+		return false, "due date must use YYYY-MM-DD"
+	}
+
+	todayDate := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, parsedDueDate.Location())
+	if parsedDueDate.Before(todayDate) {
+		return false, "due date cannot be before today"
+	}
+	return true, ""
+}
+
+func editErrorTarget(id int) string {
+	return fmt.Sprintf("#edit-error-%d", id)
+}
+
+func renderValidationError(w http.ResponseWriter, target, message string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("HX-Retarget", target)
+	w.Header().Set("HX-Reswap", "innerHTML")
+	w.WriteHeader(http.StatusBadRequest)
+	fmt.Fprint(w, template.HTMLEscapeString(message))
+}
+
+func newMux(store todoStore) http.Handler {
+	return newMuxWithToday(store, time.Now)
+}
+
+func newMuxWithToday(store todoStore, today func() time.Time) http.Handler {
+	app := newAppWithToday(store, today)
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	mux.HandleFunc("/", app.home)
@@ -231,7 +312,43 @@ func newMux(store todoStore) *http.ServeMux {
 	mux.HandleFunc("GET /edit/{id}", app.edit)
 	mux.HandleFunc("POST /update/{id}", app.update)
 	mux.HandleFunc("GET /cancel/{id}", app.cancel)
-	return mux
+	return securityMiddleware(mux)
+}
+
+func securityMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+
+		if !sameOriginRequest(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func sameOriginRequest(r *http.Request) bool {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+		return true
+	}
+
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+
+	parsedOrigin, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+
+	expectedScheme := "http"
+	if r.TLS != nil {
+		expectedScheme = "https"
+	}
+	return parsedOrigin.Scheme == expectedScheme && parsedOrigin.Host == r.Host
 }
 
 func newConfiguredStore(cfg config) (todoStore, error) {

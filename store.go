@@ -12,13 +12,14 @@ type todo struct {
 	ID        int
 	Text      string
 	Completed bool
+	DueDate   string
 }
 
 type todoStore interface {
 	List() ([]todo, error)
 	Get(id int) (todo, bool, error)
-	Create(text string) (todo, error)
-	Update(id int, text string) (todo, bool, error)
+	Create(text, dueDate string) (todo, error)
+	Update(id int, text, dueDate string) (todo, bool, error)
 	SetCompleted(id int, completed bool) (todo, bool, error)
 	Delete(id int) (bool, error)
 	Close() error
@@ -63,23 +64,24 @@ func (s *memoryStore) Get(id int) (todo, bool, error) {
 	return todo{}, false, nil
 }
 
-func (s *memoryStore) Create(text string) (todo, error) {
+func (s *memoryStore) Create(text, dueDate string) (todo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	t := todo{ID: s.nextID, Text: text}
+	t := todo{ID: s.nextID, Text: text, DueDate: dueDate}
 	s.todos = append(s.todos, t)
 	s.nextID++
 	return t, nil
 }
 
-func (s *memoryStore) Update(id int, text string) (todo, bool, error) {
+func (s *memoryStore) Update(id int, text, dueDate string) (todo, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for i, t := range s.todos {
 		if t.ID == id {
 			s.todos[i].Text = text
+			s.todos[i].DueDate = dueDate
 			return s.todos[i], true, nil
 		}
 	}
@@ -120,7 +122,7 @@ func (s *postgresStore) List() ([]todo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	rows, err := s.db.QueryContext(ctx, `SELECT id, text, completed FROM todos ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, text, completed, due_date FROM todos ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -128,8 +130,8 @@ func (s *postgresStore) List() ([]todo, error) {
 
 	var todos []todo
 	for rows.Next() {
-		var t todo
-		if err := rows.Scan(&t.ID, &t.Text, &t.Completed); err != nil {
+		t, err := scanTodo(rows)
+		if err != nil {
 			return nil, err
 		}
 		todos = append(todos, t)
@@ -144,8 +146,7 @@ func (s *postgresStore) Get(id int) (todo, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var t todo
-	err := s.db.QueryRowContext(ctx, `SELECT id, text, completed FROM todos WHERE id = $1`, id).Scan(&t.ID, &t.Text, &t.Completed)
+	t, err := scanTodo(s.db.QueryRowContext(ctx, `SELECT id, text, completed, due_date FROM todos WHERE id = $1`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return todo{}, false, nil
 	}
@@ -155,36 +156,38 @@ func (s *postgresStore) Get(id int) (todo, bool, error) {
 	return t, true, nil
 }
 
-func (s *postgresStore) Create(text string) (todo, error) {
+func (s *postgresStore) Create(text, dueDate string) (todo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var t todo
-	err := s.db.QueryRowContext(
+	t, err := scanTodo(s.db.QueryRowContext(
 		ctx,
-		`INSERT INTO todos (text) VALUES ($1) RETURNING id, text, completed`,
+		`INSERT INTO todos (text, due_date)
+		 VALUES ($1, NULLIF($2, '')::date)
+		 RETURNING id, text, completed, due_date`,
 		text,
-	).Scan(&t.ID, &t.Text, &t.Completed)
+		dueDate,
+	))
 	if err != nil {
 		return todo{}, err
 	}
 	return t, nil
 }
 
-func (s *postgresStore) Update(id int, text string) (todo, bool, error) {
+func (s *postgresStore) Update(id int, text, dueDate string) (todo, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var t todo
-	err := s.db.QueryRowContext(
+	t, err := scanTodo(s.db.QueryRowContext(
 		ctx,
 		`UPDATE todos
-		 SET text = $2, updated_at = NOW()
+		 SET text = $2, due_date = NULLIF($3, '')::date, updated_at = NOW()
 		 WHERE id = $1
-		 RETURNING id, text, completed`,
+		 RETURNING id, text, completed, due_date`,
 		id,
 		text,
-	).Scan(&t.ID, &t.Text, &t.Completed)
+		dueDate,
+	))
 	if errors.Is(err, sql.ErrNoRows) {
 		return todo{}, false, nil
 	}
@@ -198,16 +201,15 @@ func (s *postgresStore) SetCompleted(id int, completed bool) (todo, bool, error)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var t todo
-	err := s.db.QueryRowContext(
+	t, err := scanTodo(s.db.QueryRowContext(
 		ctx,
 		`UPDATE todos
 		 SET completed = $2, updated_at = NOW()
 		 WHERE id = $1
-		 RETURNING id, text, completed`,
+		 RETURNING id, text, completed, due_date`,
 		id,
 		completed,
-	).Scan(&t.ID, &t.Text, &t.Completed)
+	))
 	if errors.Is(err, sql.ErrNoRows) {
 		return todo{}, false, nil
 	}
@@ -235,4 +237,21 @@ func (s *postgresStore) Delete(id int) (bool, error) {
 
 func (s *postgresStore) Close() error {
 	return s.db.Close()
+}
+
+type todoScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanTodo(scanner todoScanner) (todo, error) {
+	var t todo
+	var dueDate sql.NullTime
+	err := scanner.Scan(&t.ID, &t.Text, &t.Completed, &dueDate)
+	if err != nil {
+		return todo{}, err
+	}
+	if dueDate.Valid {
+		t.DueDate = dueDate.Time.Format("2006-01-02")
+	}
+	return t, nil
 }

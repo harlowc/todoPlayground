@@ -1,6 +1,6 @@
 # todoPlayground
 
-A small Go and HTMX todo playground. It renders a server-side HTML page, then uses HTMX requests to add, edit, update, cancel, and remove todos without a full page refresh.
+A small Go and HTMX todo playground. It renders a server-side HTML page, then uses HTMX requests to add, edit, update, cancel, complete, and remove todos without a full page refresh. Todos can also have an optional due date.
 
 ## Requirements
 
