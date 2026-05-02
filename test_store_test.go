@@ -1,6 +1,9 @@
 package main
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 type memoryStore struct {
 	mu     sync.RWMutex
@@ -12,7 +15,7 @@ func newMemoryStore() *memoryStore {
 	return &memoryStore{nextID: 1}
 }
 
-func (s *memoryStore) List() ([]todo, error) {
+func (s *memoryStore) List(ctx context.Context) ([]todo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -21,7 +24,7 @@ func (s *memoryStore) List() ([]todo, error) {
 	return todos, nil
 }
 
-func (s *memoryStore) Get(id int) (todo, bool, error) {
+func (s *memoryStore) Get(ctx context.Context, id int) (todo, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -33,7 +36,7 @@ func (s *memoryStore) Get(id int) (todo, bool, error) {
 	return todo{}, false, nil
 }
 
-func (s *memoryStore) Create(input todoInput) (todo, error) {
+func (s *memoryStore) Create(ctx context.Context, input todoInput) (todo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -50,7 +53,7 @@ func (s *memoryStore) Create(input todoInput) (todo, error) {
 	return t, nil
 }
 
-func (s *memoryStore) Update(id int, input todoInput) (todo, bool, error) {
+func (s *memoryStore) Update(ctx context.Context, id int, input todoInput) (todo, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -67,7 +70,7 @@ func (s *memoryStore) Update(id int, input todoInput) (todo, bool, error) {
 	return todo{}, false, nil
 }
 
-func (s *memoryStore) SetCompleted(id int, completed bool) (todo, bool, error) {
+func (s *memoryStore) SetCompleted(ctx context.Context, id int, completed bool) (todo, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -80,7 +83,30 @@ func (s *memoryStore) SetCompleted(id int, completed bool) (todo, bool, error) {
 	return todo{}, false, nil
 }
 
-func (s *memoryStore) Archive(id int) (todo, bool, error) {
+func (s *memoryStore) CompleteAndRecreate(ctx context.Context, id int, dueDate string) (todo, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for i := range s.todos {
+		if s.todos[i].ID == id {
+			s.todos[i].Completed = true
+			t := todo{
+				ID:       s.nextID,
+				Text:     s.todos[i].Text,
+				DueDate:  dueDate,
+				Category: s.todos[i].Category,
+				Priority: s.todos[i].Priority,
+				Notes:    s.todos[i].Notes,
+			}
+			s.todos = append(s.todos, t)
+			s.nextID++
+			return t, true, nil
+		}
+	}
+	return todo{}, false, nil
+}
+
+func (s *memoryStore) Archive(ctx context.Context, id int) (todo, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -93,7 +119,7 @@ func (s *memoryStore) Archive(id int) (todo, bool, error) {
 	return todo{}, false, nil
 }
 
-func (s *memoryStore) Delete(id int) (bool, error) {
+func (s *memoryStore) Delete(ctx context.Context, id int) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

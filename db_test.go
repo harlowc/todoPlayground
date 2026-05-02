@@ -91,7 +91,7 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 	resetPostgresTodos(t, db)
 
 	store := newPostgresStore(db)
-	created, err := store.Create(todoInput{Text: "Write docs", Priority: "normal"})
+	created, err := store.Create(context.Background(), todoInput{Text: "Write docs", Priority: "normal"})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -103,7 +103,7 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 	}
 
 	reloaded := newPostgresStore(db)
-	todos, err := reloaded.List()
+	todos, err := reloaded.List(context.Background())
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -111,7 +111,7 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 		t.Fatalf("List() = %#v, want one persisted todo", todos)
 	}
 
-	updated, found, err := reloaded.Update(created.ID, todoInput{Text: "Ship docs", Priority: "normal"})
+	updated, found, err := reloaded.Update(context.Background(), created.ID, todoInput{Text: "Ship docs", Priority: "normal"})
 	if err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
@@ -123,7 +123,7 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 	}
 
 	reloadedAgain := newPostgresStore(db)
-	got, found, err := reloadedAgain.Get(created.ID)
+	got, found, err := reloadedAgain.Get(context.Background(), created.ID)
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -134,7 +134,7 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 		t.Fatalf("got.Text = %q, want %q", got.Text, "Ship docs")
 	}
 
-	completed, found, err := reloadedAgain.SetCompleted(created.ID, true)
+	completed, found, err := reloadedAgain.SetCompleted(context.Background(), created.ID, true)
 	if err != nil {
 		t.Fatalf("SetCompleted() error = %v", err)
 	}
@@ -146,7 +146,7 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 	}
 
 	completedAgain := newPostgresStore(db)
-	got, found, err = completedAgain.Get(created.ID)
+	got, found, err = completedAgain.Get(context.Background(), created.ID)
 	if err != nil {
 		t.Fatalf("Get() after SetCompleted error = %v", err)
 	}
@@ -157,7 +157,7 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 		t.Fatal("got.Completed = false, want persisted true")
 	}
 
-	deleted, err := reloadedAgain.Delete(created.ID)
+	deleted, err := reloadedAgain.Delete(context.Background(), created.ID)
 	if err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
@@ -166,7 +166,7 @@ func TestPostgresStorePersistsLifecycleAcrossReload(t *testing.T) {
 	}
 
 	finalStore := newPostgresStore(db)
-	todos, err = finalStore.List()
+	todos, err = finalStore.List(context.Background())
 	if err != nil {
 		t.Fatalf("final List() error = %v", err)
 	}
@@ -187,7 +187,7 @@ func TestPostgresStorePersistsDueDateAcrossReload(t *testing.T) {
 	resetPostgresTodos(t, db)
 
 	store := newPostgresStore(db)
-	created, err := store.Create(todoInput{Text: "Pay rent", DueDate: "2099-01-02", Priority: "normal"})
+	created, err := store.Create(context.Background(), todoInput{Text: "Pay rent", DueDate: "2099-01-02", Priority: "normal"})
 	if err != nil {
 		t.Fatalf("Create() with due date error = %v", err)
 	}
@@ -196,7 +196,7 @@ func TestPostgresStorePersistsDueDateAcrossReload(t *testing.T) {
 	}
 
 	reloaded := newPostgresStore(db)
-	got, found, err := reloaded.Get(created.ID)
+	got, found, err := reloaded.Get(context.Background(), created.ID)
 	if err != nil {
 		t.Fatalf("Get() after create error = %v", err)
 	}
@@ -207,7 +207,7 @@ func TestPostgresStorePersistsDueDateAcrossReload(t *testing.T) {
 		t.Fatalf("got.DueDate = %q, want %q", got.DueDate, "2099-01-02")
 	}
 
-	updated, found, err := reloaded.Update(created.ID, todoInput{Text: "Pay rent online", DueDate: "2099-02-03", Priority: "normal"})
+	updated, found, err := reloaded.Update(context.Background(), created.ID, todoInput{Text: "Pay rent online", DueDate: "2099-02-03", Priority: "normal"})
 	if err != nil {
 		t.Fatalf("Update() with due date error = %v", err)
 	}
@@ -218,7 +218,7 @@ func TestPostgresStorePersistsDueDateAcrossReload(t *testing.T) {
 		t.Fatalf("updated.DueDate = %q, want %q", updated.DueDate, "2099-02-03")
 	}
 
-	withoutDueDate, found, err := reloaded.Update(created.ID, todoInput{Text: "Pay rent later", Priority: "normal"})
+	withoutDueDate, found, err := reloaded.Update(context.Background(), created.ID, todoInput{Text: "Pay rent later", Priority: "normal"})
 	if err != nil {
 		t.Fatalf("Update() clearing due date error = %v", err)
 	}
@@ -242,7 +242,7 @@ func TestPostgresStorePersistsCategoryPriorityAndNotesAcrossReload(t *testing.T)
 	resetPostgresTodos(t, db)
 
 	store := newPostgresStore(db)
-	created, err := store.Create(todoInput{
+	created, err := store.Create(context.Background(), todoInput{
 		Text:     "Plan launch",
 		Category: "Work",
 		Priority: "high",
@@ -256,7 +256,7 @@ func TestPostgresStorePersistsCategoryPriorityAndNotesAcrossReload(t *testing.T)
 	}
 
 	reloaded := newPostgresStore(db)
-	got, found, err := reloaded.Get(created.ID)
+	got, found, err := reloaded.Get(context.Background(), created.ID)
 	if err != nil {
 		t.Fatalf("Get() after create error = %v", err)
 	}
@@ -267,7 +267,7 @@ func TestPostgresStorePersistsCategoryPriorityAndNotesAcrossReload(t *testing.T)
 		t.Fatalf("got = %#v, want category, priority, and notes persisted", got)
 	}
 
-	updated, found, err := reloaded.Update(created.ID, todoInput{
+	updated, found, err := reloaded.Update(context.Background(), created.ID, todoInput{
 		Text:     "Plan launch checklist",
 		Category: "Ops",
 		Priority: "low",
@@ -296,18 +296,18 @@ func TestPostgresStorePersistsArchiveAcrossReload(t *testing.T) {
 	resetPostgresTodos(t, db)
 
 	store := newPostgresStore(db)
-	created, err := store.Create(todoInput{Text: "Clean completed list", Priority: "normal"})
+	created, err := store.Create(context.Background(), todoInput{Text: "Clean completed list", Priority: "normal"})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if _, found, err := store.SetCompleted(created.ID, true); err != nil {
+	if _, found, err := store.SetCompleted(context.Background(), created.ID, true); err != nil {
 		t.Fatalf("SetCompleted() error = %v", err)
 	} else if !found {
 		t.Fatal("SetCompleted() did not find created todo")
 	}
 
-	archived, found, err := store.Archive(created.ID)
+	archived, found, err := store.Archive(context.Background(), created.ID)
 	if err != nil {
 		t.Fatalf("Archive() error = %v", err)
 	}
@@ -319,7 +319,7 @@ func TestPostgresStorePersistsArchiveAcrossReload(t *testing.T) {
 	}
 
 	reloaded := newPostgresStore(db)
-	got, found, err := reloaded.Get(created.ID)
+	got, found, err := reloaded.Get(context.Background(), created.ID)
 	if err != nil {
 		t.Fatalf("Get() after archive error = %v", err)
 	}
@@ -328,6 +328,60 @@ func TestPostgresStorePersistsArchiveAcrossReload(t *testing.T) {
 	}
 	if !got.Archived {
 		t.Fatalf("got.Archived = false, want true")
+	}
+}
+
+func TestPostgresStoreCompletesAndRecreatesInOneOperation(t *testing.T) {
+	if getEnv("RUN_DB_TESTS", "") != "1" {
+		t.Skip("set RUN_DB_TESTS=1 to run Postgres integration tests")
+	}
+
+	cfg := loadConfig()
+	db := openTestDB(t, cfg.postgres)
+	defer db.Close()
+
+	resetPostgresTodos(t, db)
+
+	store := newPostgresStore(db)
+	created, err := store.Create(context.Background(), todoInput{
+		Text:     "Daily review",
+		Category: "Work",
+		Priority: "high",
+		Notes:    "Keep the habit moving.",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	recreated, found, err := store.CompleteAndRecreate(context.Background(), created.ID, "2099-01-02")
+	if err != nil {
+		t.Fatalf("CompleteAndRecreate() error = %v", err)
+	}
+	if !found {
+		t.Fatal("CompleteAndRecreate() did not find created todo")
+	}
+	if recreated.ID == created.ID {
+		t.Fatalf("recreated.ID = original ID %d, want new todo", recreated.ID)
+	}
+	if recreated.Text != created.Text || recreated.Category != created.Category || recreated.Priority != created.Priority || recreated.Notes != created.Notes {
+		t.Fatalf("recreated = %#v, want copied todo fields from %#v", recreated, created)
+	}
+	if recreated.Completed {
+		t.Fatal("recreated.Completed = true, want new todo incomplete")
+	}
+	if recreated.DueDate != "2099-01-02" {
+		t.Fatalf("recreated.DueDate = %q, want 2099-01-02", recreated.DueDate)
+	}
+
+	original, found, err := store.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("Get() original error = %v", err)
+	}
+	if !found {
+		t.Fatal("Get() original did not find todo")
+	}
+	if !original.Completed {
+		t.Fatal("original.Completed = false, want completed")
 	}
 }
 

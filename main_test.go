@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -571,7 +572,7 @@ func TestAddRejectsPastDueDate(t *testing.T) {
 func TestUpdateOnlyRejectsPastDueDateWhenDateChanges(t *testing.T) {
 	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
 	store := newMemoryStore()
-	created, err := store.Create(todoInput{
+	created, err := store.Create(context.Background(), todoInput{
 		Text:     "Renew permit",
 		DueDate:  "2026-04-28",
 		Priority: "normal",

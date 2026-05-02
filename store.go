@@ -41,13 +41,14 @@ func (t todo) PriorityLabel() string {
 }
 
 type todoStore interface {
-	List() ([]todo, error)
-	Get(id int) (todo, bool, error)
-	Create(input todoInput) (todo, error)
-	Update(id int, input todoInput) (todo, bool, error)
-	SetCompleted(id int, completed bool) (todo, bool, error)
-	Archive(id int) (todo, bool, error)
-	Delete(id int) (bool, error)
+	List(ctx context.Context) ([]todo, error)
+	Get(ctx context.Context, id int) (todo, bool, error)
+	Create(ctx context.Context, input todoInput) (todo, error)
+	Update(ctx context.Context, id int, input todoInput) (todo, bool, error)
+	SetCompleted(ctx context.Context, id int, completed bool) (todo, bool, error)
+	CompleteAndRecreate(ctx context.Context, id int, dueDate string) (todo, bool, error)
+	Archive(ctx context.Context, id int) (todo, bool, error)
+	Delete(ctx context.Context, id int) (bool, error)
 	Close() error
 }
 
@@ -59,8 +60,8 @@ func newPostgresStore(db *sql.DB) *postgresStore {
 	return &postgresStore{db: db}
 }
 
-func (s *postgresStore) List() ([]todo, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (s *postgresStore) List(ctx context.Context) ([]todo, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	rows, err := s.db.QueryContext(ctx, `SELECT id, text, completed, archived, due_date, category, priority, notes FROM todos ORDER BY id`)
@@ -83,8 +84,8 @@ func (s *postgresStore) List() ([]todo, error) {
 	return todos, nil
 }
 
-func (s *postgresStore) Get(id int) (todo, bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (s *postgresStore) Get(ctx context.Context, id int) (todo, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	t, err := scanTodo(s.db.QueryRowContext(ctx, `SELECT id, text, completed, archived, due_date, category, priority, notes FROM todos WHERE id = $1`, id))
@@ -97,8 +98,8 @@ func (s *postgresStore) Get(id int) (todo, bool, error) {
 	return t, true, nil
 }
 
-func (s *postgresStore) Create(input todoInput) (todo, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (s *postgresStore) Create(ctx context.Context, input todoInput) (todo, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	t, err := scanTodo(s.db.QueryRowContext(
@@ -118,8 +119,8 @@ func (s *postgresStore) Create(input todoInput) (todo, error) {
 	return t, nil
 }
 
-func (s *postgresStore) Update(id int, input todoInput) (todo, bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (s *postgresStore) Update(ctx context.Context, id int, input todoInput) (todo, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	t, err := scanTodo(s.db.QueryRowContext(
@@ -149,8 +150,8 @@ func (s *postgresStore) Update(id int, input todoInput) (todo, bool, error) {
 	return t, true, nil
 }
 
-func (s *postgresStore) SetCompleted(id int, completed bool) (todo, bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (s *postgresStore) SetCompleted(ctx context.Context, id int, completed bool) (todo, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	t, err := scanTodo(s.db.QueryRowContext(
@@ -171,8 +172,52 @@ func (s *postgresStore) SetCompleted(id int, completed bool) (todo, bool, error)
 	return t, true, nil
 }
 
-func (s *postgresStore) Archive(id int) (todo, bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (s *postgresStore) CompleteAndRecreate(ctx context.Context, id int, dueDate string) (todo, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return todo{}, false, err
+	}
+	defer tx.Rollback()
+
+	current, err := scanTodo(tx.QueryRowContext(ctx, `SELECT id, text, completed, archived, due_date, category, priority, notes FROM todos WHERE id = $1 FOR UPDATE`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return todo{}, false, nil
+	}
+	if err != nil {
+		return todo{}, false, err
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE todos SET completed = TRUE, updated_at = NOW() WHERE id = $1`, id); err != nil {
+		return todo{}, false, err
+	}
+
+	recreated, err := scanTodo(tx.QueryRowContext(
+		ctx,
+		`INSERT INTO todos (text, due_date, category, priority, notes)
+		 VALUES ($1, NULLIF($2, '')::date, $3, $4, $5)
+		 RETURNING id, text, completed, archived, due_date, category, priority, notes`,
+		current.Text,
+		dueDate,
+		current.Category,
+		current.Priority,
+		current.Notes,
+	))
+	if err != nil {
+		return todo{}, false, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return todo{}, false, err
+	}
+
+	return recreated, true, nil
+}
+
+func (s *postgresStore) Archive(ctx context.Context, id int) (todo, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	t, err := scanTodo(s.db.QueryRowContext(
@@ -192,8 +237,8 @@ func (s *postgresStore) Archive(id int) (todo, bool, error) {
 	return t, true, nil
 }
 
-func (s *postgresStore) Delete(id int) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (s *postgresStore) Delete(ctx context.Context, id int) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	result, err := s.db.ExecContext(ctx, `DELETE FROM todos WHERE id = $1`, id)
