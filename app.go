@@ -6,7 +6,7 @@ import (
 )
 
 type app struct {
-	store     todoStore
+	todos     todoRepository
 	templates *template.Template
 	today     func() time.Time
 }
@@ -19,13 +19,13 @@ type pageData struct {
 	Search         string
 }
 
-func newAppWithToday(store todoStore, today func() time.Time) *app {
-	return newApp(store, template.Must(loadTemplates()), today)
+func newAppWithToday(todos todoRepository, today func() time.Time) *app {
+	return newApp(todos, template.Must(loadTemplates()), today)
 }
 
-func newApp(store todoStore, templates *template.Template, today func() time.Time) *app {
+func newApp(todos todoRepository, templates *template.Template, today func() time.Time) *app {
 	return &app{
-		store:     store,
+		todos:     todos,
 		templates: templates,
 		today:     today,
 	}

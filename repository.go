@@ -40,7 +40,7 @@ func (t todo) PriorityLabel() string {
 	}
 }
 
-type todoStore interface {
+type todoRepository interface {
 	List(ctx context.Context) ([]todo, error)
 	Get(ctx context.Context, id int) (todo, bool, error)
 	Create(ctx context.Context, input todoInput) (todo, error)
@@ -49,18 +49,17 @@ type todoStore interface {
 	CompleteAndRecreate(ctx context.Context, id int, dueDate string) (todo, bool, error)
 	Archive(ctx context.Context, id int) (todo, bool, error)
 	Delete(ctx context.Context, id int) (bool, error)
-	Close() error
 }
 
-type postgresStore struct {
+type postgresRepository struct {
 	db *sql.DB
 }
 
-func newPostgresStore(db *sql.DB) *postgresStore {
-	return &postgresStore{db: db}
+func newPostgresRepository(db *sql.DB) *postgresRepository {
+	return &postgresRepository{db: db}
 }
 
-func (s *postgresStore) List(ctx context.Context) ([]todo, error) {
+func (s *postgresRepository) List(ctx context.Context) ([]todo, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -84,7 +83,7 @@ func (s *postgresStore) List(ctx context.Context) ([]todo, error) {
 	return todos, nil
 }
 
-func (s *postgresStore) Get(ctx context.Context, id int) (todo, bool, error) {
+func (s *postgresRepository) Get(ctx context.Context, id int) (todo, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -98,7 +97,7 @@ func (s *postgresStore) Get(ctx context.Context, id int) (todo, bool, error) {
 	return t, true, nil
 }
 
-func (s *postgresStore) Create(ctx context.Context, input todoInput) (todo, error) {
+func (s *postgresRepository) Create(ctx context.Context, input todoInput) (todo, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -119,7 +118,7 @@ func (s *postgresStore) Create(ctx context.Context, input todoInput) (todo, erro
 	return t, nil
 }
 
-func (s *postgresStore) Update(ctx context.Context, id int, input todoInput) (todo, bool, error) {
+func (s *postgresRepository) Update(ctx context.Context, id int, input todoInput) (todo, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -150,7 +149,7 @@ func (s *postgresStore) Update(ctx context.Context, id int, input todoInput) (to
 	return t, true, nil
 }
 
-func (s *postgresStore) SetCompleted(ctx context.Context, id int, completed bool) (todo, bool, error) {
+func (s *postgresRepository) SetCompleted(ctx context.Context, id int, completed bool) (todo, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -172,7 +171,7 @@ func (s *postgresStore) SetCompleted(ctx context.Context, id int, completed bool
 	return t, true, nil
 }
 
-func (s *postgresStore) CompleteAndRecreate(ctx context.Context, id int, dueDate string) (todo, bool, error) {
+func (s *postgresRepository) CompleteAndRecreate(ctx context.Context, id int, dueDate string) (todo, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -216,7 +215,7 @@ func (s *postgresStore) CompleteAndRecreate(ctx context.Context, id int, dueDate
 	return recreated, true, nil
 }
 
-func (s *postgresStore) Archive(ctx context.Context, id int) (todo, bool, error) {
+func (s *postgresRepository) Archive(ctx context.Context, id int) (todo, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -237,7 +236,7 @@ func (s *postgresStore) Archive(ctx context.Context, id int) (todo, bool, error)
 	return t, true, nil
 }
 
-func (s *postgresStore) Delete(ctx context.Context, id int) (bool, error) {
+func (s *postgresRepository) Delete(ctx context.Context, id int) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -253,7 +252,7 @@ func (s *postgresStore) Delete(ctx context.Context, id int) (bool, error) {
 	return rowsAffected > 0, nil
 }
 
-func (s *postgresStore) Close() error {
+func (s *postgresRepository) Close() error {
 	return s.db.Close()
 }
 

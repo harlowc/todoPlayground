@@ -19,7 +19,7 @@ func (a *app) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	todos, err := a.store.List(r.Context())
+	todos, err := a.todos.List(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -53,7 +53,7 @@ func (a *app) add(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t, err := a.store.Create(r.Context(), input)
+	t, err := a.todos.Create(r.Context(), input)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -80,7 +80,7 @@ func (a *app) edit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t, found, err := a.store.Get(r.Context(), id)
+	t, found, err := a.todos.Get(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -113,7 +113,7 @@ func (a *app) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	current, found, err := a.store.Get(r.Context(), id)
+	current, found, err := a.todos.Get(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -127,7 +127,7 @@ func (a *app) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, found, err := a.store.Update(r.Context(), id, input)
+	updated, found, err := a.todos.Update(r.Context(), id, input)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -158,7 +158,7 @@ func (a *app) cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t, found, err := a.store.Get(r.Context(), id)
+	t, found, err := a.todos.Get(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -185,7 +185,7 @@ func (a *app) remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deleted, err := a.store.Delete(r.Context(), id)
+	deleted, err := a.todos.Delete(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -215,7 +215,7 @@ func (a *app) doneTomorrow(w http.ResponseWriter, r *http.Request) {
 		dueDate = nextWeekday(a.today())
 	}
 
-	recreated, found, err := a.store.CompleteAndRecreate(r.Context(), id, dueDate)
+	recreated, found, err := a.todos.CompleteAndRecreate(r.Context(), id, dueDate)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -243,7 +243,7 @@ func (a *app) setCompleted(w http.ResponseWriter, r *http.Request) {
 	}
 
 	completed := r.FormValue("completed") == "on"
-	t, found, err := a.store.SetCompleted(r.Context(), id, completed)
+	t, found, err := a.todos.SetCompleted(r.Context(), id, completed)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -274,7 +274,7 @@ func (a *app) archive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, found, err := a.store.Archive(r.Context(), id)
+	_, found, err := a.todos.Archive(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

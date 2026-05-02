@@ -27,15 +27,12 @@ Press `Ctrl-C` to stop the Go app. Run `make postgres-down` when you want to sto
 The app can read its server and Postgres settings from environment variables:
 
 - `SERVER_ADDR` default: `:8080`
-- `TODO_STORE` default: `postgres`
 - `POSTGRES_HOST` default: `localhost`
 - `POSTGRES_PORT` default: `5432`
 - `POSTGRES_DB` default: `todo_playground`
 - `POSTGRES_USER` default: `todo_user`
 - `POSTGRES_PASSWORD` required
 - `POSTGRES_SSLMODE` default: `disable`
-
-`TODO_STORE` is kept as a configuration switch, but the application runtime currently supports Postgres only.
 
 ## Local Postgres
 
@@ -62,7 +59,7 @@ The container exposes Postgres on `localhost:5432` with:
 To run the app manually against Postgres:
 
 ```sh
-POSTGRES_PASSWORD=replace-with-a-local-secret TODO_STORE=postgres go run .
+POSTGRES_PASSWORD=replace-with-a-local-secret go run .
 ```
 
 ## Example Env File
@@ -73,7 +70,6 @@ A local setup should look like:
 
 ```dotenv
 SERVER_ADDR=:8080
-TODO_STORE=postgres
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_DB=todo_playground
@@ -121,7 +117,7 @@ GOCACHE=/tmp/test1-go-cache go test ./...
 ## Current Features
 
 - Add, edit, complete, archive, remove, and recreate todos.
-- Store due dates, categories, priorities, and notes in Postgres.
+- Persist due dates, categories, priorities, and notes in Postgres.
 - View all, active, completed, scheduled, today, and upcoming todos.
 - Filter by category and priority.
 - Search todo text, category, and notes.

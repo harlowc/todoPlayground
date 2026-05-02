@@ -11,11 +11,11 @@ import (
 )
 
 func newTestMux() http.Handler {
-	return newMux(newMemoryStore())
+	return newMux(newMemoryRepository())
 }
 
-func newTestMuxWithToday(store todoStore, today time.Time) http.Handler {
-	return newMuxWithToday(store, func() time.Time {
+func newTestMuxWithToday(todos todoRepository, today time.Time) http.Handler {
+	return newMuxWithToday(todos, func() time.Time {
 		return today
 	})
 }
@@ -242,7 +242,7 @@ func TestCheckingTodoCompletesItAndRemovesItFromActiveList(t *testing.T) {
 
 func TestDoneAndRecreateForTomorrowCompletesCurrentTodoAndCreatesTomorrowCopy(t *testing.T) {
 	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
-	mux := newTestMuxWithToday(newMemoryStore(), today)
+	mux := newTestMuxWithToday(newMemoryRepository(), today)
 
 	rec := postForm(t, mux, "/add", url.Values{
 		"text":     {"Daily review"},
@@ -403,7 +403,7 @@ func TestTodoViewsFilterActiveCompletedAndScheduledTodos(t *testing.T) {
 
 func TestTodoDueDatePlanningViews(t *testing.T) {
 	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
-	mux := newTestMuxWithToday(newMemoryStore(), today)
+	mux := newTestMuxWithToday(newMemoryRepository(), today)
 
 	rec := postForm(t, mux, "/add", url.Values{
 		"text":     {"Today task"},
@@ -513,7 +513,7 @@ func TestArchiveCompletedTodoHidesItFromNormalViews(t *testing.T) {
 
 func TestDoneTomorrowOffersNextWeekdayWhenTomorrowIsWeekend(t *testing.T) {
 	friday := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
-	mux := newTestMuxWithToday(newMemoryStore(), friday)
+	mux := newTestMuxWithToday(newMemoryRepository(), friday)
 
 	rec := postForm(t, mux, "/add", url.Values{"text": {"Weekly review"}})
 	requireStatus(t, rec, http.StatusOK)
@@ -547,7 +547,7 @@ func TestTodoDueDateIsOptionalAndValidated(t *testing.T) {
 
 func TestAddRejectsPastDueDate(t *testing.T) {
 	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
-	mux := newTestMuxWithToday(newMemoryStore(), today)
+	mux := newTestMuxWithToday(newMemoryRepository(), today)
 
 	rec := postForm(t, mux, "/add", url.Values{
 		"text":     {"File report"},
@@ -571,8 +571,8 @@ func TestAddRejectsPastDueDate(t *testing.T) {
 
 func TestUpdateOnlyRejectsPastDueDateWhenDateChanges(t *testing.T) {
 	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
-	store := newMemoryStore()
-	created, err := store.Create(context.Background(), todoInput{
+	repo := newMemoryRepository()
+	created, err := repo.Create(context.Background(), todoInput{
 		Text:     "Renew permit",
 		DueDate:  "2026-04-28",
 		Priority: "normal",
@@ -580,7 +580,7 @@ func TestUpdateOnlyRejectsPastDueDateWhenDateChanges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	mux := newTestMuxWithToday(store, today)
+	mux := newTestMuxWithToday(repo, today)
 
 	rec := postForm(t, mux, "/update/1", url.Values{
 		"text":     {"Renew permit online"},
@@ -648,9 +648,8 @@ func TestUnknownRouteReturnsNotFound(t *testing.T) {
 	requireStatus(t, rec, http.StatusNotFound)
 }
 
-func TestPostgresStoreRequiresPassword(t *testing.T) {
-	_, err := newConfiguredStore(config{
-		store: "postgres",
+func TestPostgresRepositoryRequiresPassword(t *testing.T) {
+	_, err := newPostgresRepositoryFromConfig(config{
 		postgres: postgresConfig{
 			host:    "localhost",
 			port:    "5432",
@@ -660,9 +659,9 @@ func TestPostgresStoreRequiresPassword(t *testing.T) {
 		},
 	})
 	if err == nil {
-		t.Fatal("newConfiguredStore() error = nil, want POSTGRES_PASSWORD error")
+		t.Fatal("newPostgresRepositoryFromConfig() error = nil, want POSTGRES_PASSWORD error")
 	}
 	if !strings.Contains(err.Error(), "POSTGRES_PASSWORD is required") {
-		t.Fatalf("newConfiguredStore() error = %q, want POSTGRES_PASSWORD error", err)
+		t.Fatalf("newPostgresRepositoryFromConfig() error = %q, want POSTGRES_PASSWORD error", err)
 	}
 }

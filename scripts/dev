@@ -16,4 +16,4 @@ while [ "$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose 
 done
 
 echo "Starting todoPlayground at http://localhost:8080"
-TODO_STORE="${TODO_STORE:-postgres}" go run .
+go run .

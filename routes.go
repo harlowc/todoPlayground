@@ -6,16 +6,16 @@ import (
 	"time"
 )
 
-func newMux(store todoStore) http.Handler {
-	return newMuxWithToday(store, time.Now)
+func newMux(todos todoRepository) http.Handler {
+	return newMuxWithToday(todos, time.Now)
 }
 
-func newMuxWithToday(store todoStore, today func() time.Time) http.Handler {
-	return newMuxWithTemplates(store, template.Must(loadTemplates()), today)
+func newMuxWithToday(todos todoRepository, today func() time.Time) http.Handler {
+	return newMuxWithTemplates(todos, template.Must(loadTemplates()), today)
 }
 
-func newMuxWithTemplates(store todoStore, templates *template.Template, today func() time.Time) http.Handler {
-	app := newApp(store, templates, today)
+func newMuxWithTemplates(todos todoRepository, templates *template.Template, today func() time.Time) http.Handler {
+	app := newApp(todos, templates, today)
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	mux.HandleFunc("/", app.home)

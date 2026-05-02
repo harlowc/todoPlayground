@@ -4,7 +4,6 @@ import "testing"
 
 func TestLoadConfigDefaults(t *testing.T) {
 	t.Setenv("SERVER_ADDR", "")
-	t.Setenv("TODO_STORE", "")
 	t.Setenv("POSTGRES_HOST", "")
 	t.Setenv("POSTGRES_PORT", "")
 	t.Setenv("POSTGRES_DB", "")
@@ -16,9 +15,6 @@ func TestLoadConfigDefaults(t *testing.T) {
 
 	if cfg.serverAddr != ":8080" {
 		t.Fatalf("serverAddr = %q, want %q", cfg.serverAddr, ":8080")
-	}
-	if cfg.store != "postgres" {
-		t.Fatalf("store = %q, want %q", cfg.store, "postgres")
 	}
 	if cfg.postgres.host != "localhost" {
 		t.Fatalf("host = %q, want %q", cfg.postgres.host, "localhost")
@@ -40,19 +36,8 @@ func TestLoadConfigDefaults(t *testing.T) {
 	}
 }
 
-func TestConfiguredStoreOnlySupportsPostgres(t *testing.T) {
-	_, err := newConfiguredStore(config{store: "memory"})
-	if err == nil {
-		t.Fatal("newConfiguredStore() error = nil, want unsupported store error")
-	}
-	if err.Error() != `unsupported TODO_STORE "memory"; use "postgres"` {
-		t.Fatalf("newConfiguredStore() error = %q, want unsupported memory error", err)
-	}
-}
-
 func TestLoadConfigUsesEnvironment(t *testing.T) {
 	t.Setenv("SERVER_ADDR", ":9090")
-	t.Setenv("TODO_STORE", "postgres")
 	t.Setenv("POSTGRES_HOST", "db")
 	t.Setenv("POSTGRES_PORT", "5433")
 	t.Setenv("POSTGRES_DB", "todos_dev")
@@ -64,9 +49,6 @@ func TestLoadConfigUsesEnvironment(t *testing.T) {
 
 	if cfg.serverAddr != ":9090" {
 		t.Fatalf("serverAddr = %q, want %q", cfg.serverAddr, ":9090")
-	}
-	if cfg.store != "postgres" {
-		t.Fatalf("store = %q, want %q", cfg.store, "postgres")
 	}
 	if cfg.postgres.host != "db" {
 		t.Fatalf("host = %q, want %q", cfg.postgres.host, "db")

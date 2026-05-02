@@ -5,17 +5,17 @@ import (
 	"sync"
 )
 
-type memoryStore struct {
+type memoryRepository struct {
 	mu     sync.RWMutex
 	nextID int
 	todos  []todo
 }
 
-func newMemoryStore() *memoryStore {
-	return &memoryStore{nextID: 1}
+func newMemoryRepository() *memoryRepository {
+	return &memoryRepository{nextID: 1}
 }
 
-func (s *memoryStore) List(ctx context.Context) ([]todo, error) {
+func (s *memoryRepository) List(ctx context.Context) ([]todo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -24,7 +24,7 @@ func (s *memoryStore) List(ctx context.Context) ([]todo, error) {
 	return todos, nil
 }
 
-func (s *memoryStore) Get(ctx context.Context, id int) (todo, bool, error) {
+func (s *memoryRepository) Get(ctx context.Context, id int) (todo, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -36,7 +36,7 @@ func (s *memoryStore) Get(ctx context.Context, id int) (todo, bool, error) {
 	return todo{}, false, nil
 }
 
-func (s *memoryStore) Create(ctx context.Context, input todoInput) (todo, error) {
+func (s *memoryRepository) Create(ctx context.Context, input todoInput) (todo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -53,7 +53,7 @@ func (s *memoryStore) Create(ctx context.Context, input todoInput) (todo, error)
 	return t, nil
 }
 
-func (s *memoryStore) Update(ctx context.Context, id int, input todoInput) (todo, bool, error) {
+func (s *memoryRepository) Update(ctx context.Context, id int, input todoInput) (todo, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -70,7 +70,7 @@ func (s *memoryStore) Update(ctx context.Context, id int, input todoInput) (todo
 	return todo{}, false, nil
 }
 
-func (s *memoryStore) SetCompleted(ctx context.Context, id int, completed bool) (todo, bool, error) {
+func (s *memoryRepository) SetCompleted(ctx context.Context, id int, completed bool) (todo, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -83,7 +83,7 @@ func (s *memoryStore) SetCompleted(ctx context.Context, id int, completed bool) 
 	return todo{}, false, nil
 }
 
-func (s *memoryStore) CompleteAndRecreate(ctx context.Context, id int, dueDate string) (todo, bool, error) {
+func (s *memoryRepository) CompleteAndRecreate(ctx context.Context, id int, dueDate string) (todo, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -106,12 +106,12 @@ func (s *memoryStore) CompleteAndRecreate(ctx context.Context, id int, dueDate s
 	return todo{}, false, nil
 }
 
-func (s *memoryStore) Archive(ctx context.Context, id int) (todo, bool, error) {
+func (s *memoryRepository) Archive(ctx context.Context, id int) (todo, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for i := range s.todos {
-		if s.todos[i].ID == id {
+		if s.todos[i].ID == id && s.todos[i].Completed {
 			s.todos[i].Archived = true
 			return s.todos[i], true, nil
 		}
@@ -119,7 +119,7 @@ func (s *memoryStore) Archive(ctx context.Context, id int) (todo, bool, error) {
 	return todo{}, false, nil
 }
 
-func (s *memoryStore) Delete(ctx context.Context, id int) (bool, error) {
+func (s *memoryRepository) Delete(ctx context.Context, id int) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -130,8 +130,4 @@ func (s *memoryStore) Delete(ctx context.Context, id int) (bool, error) {
 		}
 	}
 	return false, nil
-}
-
-func (s *memoryStore) Close() error {
-	return nil
 }
