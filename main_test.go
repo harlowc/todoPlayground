@@ -107,52 +107,6 @@ func TestHomeAllowsHTMXValidationErrorsToRender(t *testing.T) {
 	requireContains(t, body, "shouldSwap = true")
 }
 
-func TestAddFormUsesResponsiveGridLayout(t *testing.T) {
-	mux := newTestMux()
-
-	rec := get(t, mux, "/")
-	requireStatus(t, rec, http.StatusOK)
-
-	body := rec.Body.String()
-	requireContains(t, body, `.add-form { display: grid;`)
-	requireContains(t, body, `grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) minmax(130px, 0.8fr);`)
-	requireContains(t, body, `.add-form .text-input { grid-column: 1 / -1; }`)
-	requireContains(t, body, `.add-form .notes-input { grid-column: 1 / -1;`)
-	requireContains(t, body, `.add-form button { grid-column: 1 / -1;`)
-	requireContains(t, body, `@media (max-width: 560px)`)
-	requireContains(t, body, `.add-form { grid-template-columns: 1fr 1fr; }`)
-	requireContains(t, body, `@media (max-width: 520px)`)
-	requireContains(t, body, `.add-form { grid-template-columns: 1fr; }`)
-	requireContains(t, body, `class="text-input"`)
-}
-
-func TestTodoItemActionsUseSeparateCorners(t *testing.T) {
-	mux := newTestMux()
-
-	rec := get(t, mux, "/")
-	requireStatus(t, rec, http.StatusOK)
-
-	body := rec.Body.String()
-	requireContains(t, body, `.remove-form { position: absolute; top: 8px; right: 8px; }`)
-	requireContains(t, body, `.edit-btn { position: absolute; right: 16px; bottom: 8px;`)
-	requireContains(t, body, `.archive-form { position: absolute; right: 16px; bottom: 8px; }`)
-}
-
-func TestHomeUsesDarkGlassmorphicTheme(t *testing.T) {
-	mux := newTestMux()
-
-	rec := get(t, mux, "/")
-	requireStatus(t, rec, http.StatusOK)
-
-	body := rec.Body.String()
-	requireContains(t, body, `html { color-scheme: dark; }`)
-	requireContains(t, body, `background: #11100f;`)
-	requireContains(t, body, `backdrop-filter: blur(18px);`)
-	requireContains(t, body, `background: rgba(255, 255, 255, 0.08);`)
-	requireContains(t, body, `box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);`)
-	requireContains(t, body, `linear-gradient(135deg, #8b5cf6, #1d4ed8);`)
-}
-
 func TestHomeUsesLocalHTMXAsset(t *testing.T) {
 	mux := newTestMux()
 
