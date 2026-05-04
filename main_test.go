@@ -87,7 +87,13 @@ func TestAddRendersTodoAndResetsForm(t *testing.T) {
 	requireContains(t, body, `hx-confirm="Remove Buy milk?"`)
 	requireContains(t, body, `aria-label="Remove Buy milk"`)
 	requireContains(t, body, `hx-swap-oob="outerHTML"`)
-	requireContains(t, body, `placeholder="Add a todo..."`)
+	requireContains(t, body, `class="composer-shell"`)
+	requireContains(t, body, `placeholder="Task name" aria-label="Task name" required autofocus`)
+	requireContains(t, body, `class="composer-actions" aria-label="Optional task details"`)
+	requireContains(t, body, `class="composer-chip due-chip"`)
+	requireContains(t, body, `class="composer-chip category-chip"`)
+	requireContains(t, body, `class="composer-chip priority-chip"`)
+	requireContains(t, body, `class="notes-chip"`)
 	requireContains(t, body, `id="add-error"`)
 
 	rec = get(t, mux, "/")
@@ -108,15 +114,21 @@ func TestHomeAllowsHTMXValidationErrorsToRender(t *testing.T) {
 	requireContains(t, body, "shouldSwap = true")
 }
 
-func TestHomeUsesLocalHTMXAsset(t *testing.T) {
+func TestHomeUsesLocalStaticAssets(t *testing.T) {
 	mux := newTestMux()
 
 	rec := get(t, mux, "/")
 	requireStatus(t, rec, http.StatusOK)
 
 	body := rec.Body.String()
+	requireContains(t, body, `<link rel="stylesheet" href="/static/theme.css">`)
 	requireContains(t, body, `<script src="/static/htmx.min.js"></script>`)
+	requireNotContains(t, body, "<style>")
 	requireNotContains(t, body, "unpkg.com")
+
+	rec = get(t, mux, "/static/theme.css")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "--accent: #e63946")
 
 	rec = get(t, mux, "/static/htmx.min.js")
 	requireStatus(t, rec, http.StatusOK)

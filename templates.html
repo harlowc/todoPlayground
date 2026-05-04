@@ -4,75 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>todoPlayground</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html { color-scheme: dark; }
-    body { font-family: system-ui, sans-serif; max-width: 720px; min-height: 100vh; margin: 56px auto; padding: 0 24px 56px; background: #11100f; background-image: linear-gradient(145deg, #0b1020 0%, #111827 48%, #0f172a 100%); color: #f8fafc; }
-    h1 { margin-bottom: 22px; color: #f8fafc; font-size: 38px; letter-spacing: 0; }
-    .add-form { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) minmax(130px, 0.8fr); gap: 8px; margin-bottom: 24px; width: 100%; }
-    .view-nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-    .view-nav a { padding: 7px 11px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px; background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(18px); color: #e7e5e4; font-size: 14px; text-decoration: none; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18); }
-    .view-nav a[aria-current="page"] { background: linear-gradient(135deg, #8b5cf6, #1d4ed8); border-color: rgba(255, 255, 255, 0.35); color: #f8fafc; font-weight: 700; }
-    .filter-form { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(120px, 0.8fr) minmax(120px, 0.7fr) auto auto; gap: 8px; margin-bottom: 16px; }
-    .filter-form input, .filter-form select { min-width: 0; width: 100%; padding: 9px 11px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px; font-size: 14px; background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(18px); color: #f8fafc; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18); }
-    .filter-form button, .clear-filter { padding: 9px 12px; border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 6px; background: linear-gradient(135deg, #8b5cf6, #1d4ed8); color: #f8fafc; font-size: 14px; font-weight: 700; text-decoration: none; cursor: pointer; text-align: center; box-shadow: 0 12px 30px rgba(139, 92, 246, 0.22); }
-    .clear-filter { background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(18px); color: #e7e5e4; font-weight: 500; box-shadow: none; }
-    .edit-form { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(130px, 0.8fr) auto auto; align-items: start; gap: 8px; width: 100%; }
-    input::placeholder, textarea::placeholder { color: rgba(248, 250, 252, 0.58); opacity: 1; }
-    input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
-    .add-form input, .add-form select, .add-form textarea { min-width: 0; width: 100%; padding: 12px 14px; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 8px; font-size: 16px; background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(18px); color: #f8fafc; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28); }
-    .add-form .text-input { grid-column: 1 / -1; }
-    .add-form .notes-input { grid-column: 1 / -1; min-height: 72px; resize: vertical; }
-    .add-form button { grid-column: 1 / -1; padding: 12px 20px; background: linear-gradient(135deg, #8b5cf6, #1d4ed8); color: #f8fafc; border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 8px; font-size: 16px; font-weight: 800; cursor: pointer; white-space: nowrap; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28); }
-    .add-form button:hover, .filter-form button:hover { filter: brightness(1.08); }
-    .add-form button:disabled { opacity: 0.5; cursor: default; }
-    .form-error { grid-column: 1 / -1; color: #fda4af; font-size: 14px; line-height: 1.3; }
-    .form-error:empty { display: none; }
-    ul { list-style: none; }
-    .todo-item { position: relative; display: flex; align-items: flex-start; gap: 8px; background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(18px); padding: 14px 42px 42px 16px; margin-bottom: 10px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.16); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28); animation: fadeIn 0.2s ease; }
-    .todo-toggle { flex: 0 0 auto; width: 18px; height: 18px; accent-color: #8b5cf6; cursor: pointer; }
-    .todo-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-    .todo-text { flex: 1; min-width: 0; overflow-wrap: anywhere; color: #f8fafc; font-size: 16px; line-height: 1.4; }
-    .todo-meta { display: flex; gap: 6px; flex-wrap: wrap; color: #d6d3d1; font-size: 13px; line-height: 1.3; }
-    .todo-notes { color: #c7d2fe; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
-    .todo-item.completed { opacity: 0.78; }
-    .todo-item.completed .todo-text { color: #a8a29e; text-decoration: line-through; }
-    .todo-menu { flex: 0 0 auto; position: relative; }
-    .todo-menu summary { width: 14px; height: 18px; border: 0; border-radius: 4px; color: #d6d3d1; display: grid; place-items: center; cursor: pointer; font-size: 11px; list-style: none; }
-    .todo-menu summary::-webkit-details-marker { display: none; }
-    .todo-menu-actions { position: absolute; z-index: 2; top: 28px; left: 0; display: flex; flex-direction: column; gap: 4px; min-width: 160px; padding: 6px; background: rgba(17, 16, 15, 0.82); backdrop-filter: blur(18px); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 8px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28); }
-    .todo-menu-actions button { display: block; width: 100%; padding: 7px 8px; background: none; border: 0; color: #f8fafc; cursor: pointer; font-size: 14px; text-align: left; text-decoration: none; }
-    .todo-menu-actions button:hover, .todo-menu-actions a:hover { background: rgba(255, 255, 255, 0.1); }
-    .edit-btn { position: absolute; right: 16px; bottom: 8px; padding: 5px 10px; background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(18px); border: 1px solid rgba(255, 255, 255, 0.2); color: #f8fafc; border-radius: 6px; cursor: pointer; font-size: 14px; text-decoration: none; }
-    .remove-form { position: absolute; top: 8px; right: 8px; }
-    .archive-form { position: absolute; right: 16px; bottom: 8px; }
-    .remove-btn { width: 24px; height: 24px; padding: 0; background: rgba(251, 113, 133, 0.08); border: 1px solid #fb7185; color: #fb7185; border-radius: 999px; cursor: pointer; font-size: 14px; line-height: 1; }
-    .archive-btn { padding: 5px 10px; background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(18px); border: 1px solid rgba(255, 255, 255, 0.2); color: #f8fafc; border-radius: 6px; cursor: pointer; font-size: 14px; }
-    .cancel-btn { padding: 6px 12px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); color: #f8fafc; border-radius: 6px; cursor: pointer; font-size: 14px; text-decoration: none; text-align: center; }
-    .remove-btn:hover { background: #fb7185; color: #11100f; }
-    .edit-btn:hover, .archive-btn:hover, .cancel-btn:hover { background: rgba(255, 255, 255, 0.16); }
-    .save-btn { padding: 6px 12px; background: #8b5cf6; border: 1px solid rgba(255, 255, 255, 0.22); color: #f8fafc; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 700; }
-    .save-btn:hover { filter: brightness(1.08); }
-    .edit-input { grid-column: 1 / -1; width: 100%; padding: 6px 10px; border: 1px solid rgba(139, 92, 246, 0.72); border-radius: 6px; font-size: 16px; min-width: 0; background: rgba(255, 255, 255, 0.08); color: #f8fafc; }
-    .edit-category-input, .edit-priority-input { width: 100%; padding: 6px 10px; border: 1px solid rgba(139, 92, 246, 0.72); border-radius: 6px; font-size: 16px; min-width: 0; background: rgba(255, 255, 255, 0.08); color: #f8fafc; }
-    .edit-date-input { width: 100%; padding: 6px 10px; border: 1px solid rgba(139, 92, 246, 0.72); border-radius: 6px; font-size: 16px; min-width: 0; background: rgba(255, 255, 255, 0.08); color: #f8fafc; }
-    .edit-notes-input { grid-column: 1 / -1; width: 100%; padding: 6px 10px; border: 1px solid rgba(139, 92, 246, 0.72); border-radius: 6px; font-size: 16px; min-height: 72px; resize: vertical; background: rgba(255, 255, 255, 0.08); color: #f8fafc; }
-    .edit-form .form-error { grid-column: 1 / -1; }
-    @media (max-width: 560px) {
-      .add-form { grid-template-columns: 1fr 1fr; }
-      .add-form .text-input, .add-form .notes-input, .add-form button { grid-column: 1 / -1; }
-    }
-    @media (max-width: 520px) {
-      body { margin: 32px auto; padding: 0 14px; }
-      .filter-form { grid-template-columns: 1fr 1fr; }
-      .filter-form input[type="search"] { grid-column: 1 / -1; }
-      .add-form { grid-template-columns: 1fr; }
-      .todo-item { align-items: flex-start; flex-wrap: wrap; }
-      .edit-form { grid-template-columns: 1fr; }
-      .edit-input, .edit-category-input, .edit-priority-input, .edit-date-input, .edit-notes-input, .save-btn, .cancel-btn { grid-column: 1 / -1; }
-    }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
-  </style>
+  <link rel="stylesheet" href="/static/theme.css">
   <script src="/static/htmx.min.js"></script>
   <script>
     document.addEventListener("htmx:beforeSwap", function(event) {
@@ -124,14 +56,30 @@
 {{end}}
 
 {{define "add-form-fields"}}
-      <input class="text-input" type="text" name="text" placeholder="Add a todo..." required autofocus>
-      <input class="due-date-input" type="date" name="due_date" aria-label="Due date">
-      <input class="category-input" type="text" name="category" placeholder="Category" aria-label="Category">
-      <select class="priority-input" name="priority" aria-label="Priority">
-        {{template "priority-options" "normal"}}
-      </select>
-      <textarea class="notes-input" name="notes" placeholder="Notes" aria-label="Notes"></textarea>
-      <button type="submit">add</button>
+      <div class="composer-shell">
+        <input class="text-input" type="text" name="text" placeholder="Task name" aria-label="Task name" required autofocus>
+        <div class="composer-actions" aria-label="Optional task details">
+          <label class="composer-chip due-chip">
+            <span>Due</span>
+            <input class="due-date-input" type="date" name="due_date" aria-label="Due date">
+          </label>
+          <label class="composer-chip category-chip">
+            <span>Category</span>
+            <input class="category-input" type="text" name="category" placeholder="None" aria-label="Category">
+          </label>
+          <label class="composer-chip priority-chip">
+            <span>Priority</span>
+            <select class="priority-input" name="priority" aria-label="Priority">
+              {{template "priority-options" "normal"}}
+            </select>
+          </label>
+          <details class="notes-chip">
+            <summary>Notes</summary>
+            <textarea class="notes-input" name="notes" placeholder="Add context..." aria-label="Notes"></textarea>
+          </details>
+          <button class="add-btn" type="submit">add</button>
+        </div>
+      </div>
       <p id="add-error" class="form-error" role="alert" aria-live="polite"></p>
 {{end}}
 
