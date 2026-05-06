@@ -168,6 +168,35 @@ a:focus-visible {
   line-height: 1.35;
 }
 
+.quick-add-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-height: 28px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.quick-add-preview[hidden] {
+  display: none;
+}
+
+.quick-add-preview-label {
+  color: var(--text-soft);
+  font-weight: 700;
+}
+
+.quick-add-preview-chip {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(16, 20, 22, 0.42);
+  color: var(--text);
+  white-space: nowrap;
+}
+
 .composer-actions {
   display: flex;
   align-items: center;

@@ -123,6 +123,7 @@ GOCACHE=/tmp/test1-go-cache go test ./...
 - Search todo text, category, and notes.
 - Hide archived completed todos from the normal views.
 - Offer the next weekday when recreating a task would otherwise land on a weekend.
+- Parse quick-add shortcuts from task names, with a live preview before submit.
 
 ## Notes
 

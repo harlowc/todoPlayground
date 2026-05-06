@@ -17,6 +17,7 @@ type pageData struct {
 	CategoryFilter string
 	PriorityFilter string
 	Search         string
+	TodayISO       string
 }
 
 func newAppWithToday(todos todoRepository, today func() time.Time) *app {
@@ -49,4 +50,8 @@ func (a *app) prepareTodo(t todo) todo {
 		t.NextWeekdayPrompt = nextWeekdayPrompt(a.today())
 	}
 	return t
+}
+
+func (a *app) addFormData() pageData {
+	return pageData{TodayISO: a.today().Format("2006-01-02")}
 }

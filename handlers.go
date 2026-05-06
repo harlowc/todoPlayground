@@ -25,13 +25,12 @@ func (a *app) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := pageData{
-		Todos:          a.prepareTodos(filterTodos(todos, view, filters, a.today())),
-		View:           view,
-		CategoryFilter: filters.Category,
-		PriorityFilter: filters.Priority,
-		Search:         filters.Search,
-	}
+	data := a.addFormData()
+	data.Todos = a.prepareTodos(filterTodos(todos, view, filters, a.today()))
+	data.View = view
+	data.CategoryFilter = filters.Category
+	data.PriorityFilter = filters.Priority
+	data.Search = filters.Search
 	if err := a.templates.ExecuteTemplate(w, "base", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -46,6 +45,11 @@ func (a *app) add(w http.ResponseWriter, r *http.Request) {
 	input, ok, message := parseTodoInput(r)
 	if !ok {
 		renderValidationError(w, addErrorTarget, message)
+		return
+	}
+	input = applyQuickAdd(input, a.today())
+	if input.Text == "" {
+		renderValidationError(w, addErrorTarget, "text is required")
 		return
 	}
 	if ok, message := validateDueDateNotPast(input.DueDate, a.today()); !ok {
@@ -64,7 +68,7 @@ func (a *app) add(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := a.templates.ExecuteTemplate(w, "reset-add-form", nil); err != nil {
+	if err := a.templates.ExecuteTemplate(w, "reset-add-form", a.addFormData()); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -142,7 +146,7 @@ func (a *app) update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := a.templates.ExecuteTemplate(w, "reset-add-form", nil); err != nil {
+	if err := a.templates.ExecuteTemplate(w, "reset-add-form", a.addFormData()); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

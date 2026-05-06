@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -20,10 +21,10 @@ func parseTodoID(w http.ResponseWriter, r *http.Request) (int, bool) {
 
 func parseTodoInput(r *http.Request) (todoInput, bool, string) {
 	input := todoInput{
-		Text:     r.FormValue("text"),
-		Category: r.FormValue("category"),
-		Priority: r.FormValue("priority"),
-		Notes:    r.FormValue("notes"),
+		Text:     strings.TrimSpace(r.FormValue("text")),
+		Category: strings.TrimSpace(r.FormValue("category")),
+		Priority: strings.TrimSpace(r.FormValue("priority")),
+		Notes:    strings.TrimSpace(r.FormValue("notes")),
 	}
 	if input.Text == "" {
 		return todoInput{}, false, "text is required"

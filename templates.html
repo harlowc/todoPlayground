@@ -6,6 +6,7 @@
   <title>todoPlayground</title>
   <link rel="stylesheet" href="/static/theme.css">
   <script src="/static/htmx.min.js"></script>
+  <script src="/static/quickadd-preview.js" defer></script>
   <script>
     document.addEventListener("htmx:beforeSwap", function(event) {
       if (event.detail.xhr.status === 400 && event.detail.xhr.getResponseHeader("HX-Retarget")) {
@@ -58,6 +59,13 @@
 {{define "add-form-fields"}}
       <div class="composer-shell">
         <input class="text-input" type="text" name="text" placeholder="Task name" aria-label="Task name" required autofocus>
+        <div class="quick-add-preview" data-quick-add-preview data-today="{{.TodayISO}}" aria-live="polite" hidden>
+          <span class="quick-add-preview-label">Preview</span>
+          <span class="quick-add-preview-chip" data-preview-task hidden></span>
+          <span class="quick-add-preview-chip" data-preview-due hidden></span>
+          <span class="quick-add-preview-chip" data-preview-category hidden></span>
+          <span class="quick-add-preview-chip" data-preview-priority hidden></span>
+        </div>
         <div class="composer-actions" aria-label="Optional task details">
           <label class="composer-chip due-chip">
             <span>Due</span>

@@ -133,6 +133,38 @@ func TestHomeUsesLocalStaticAssets(t *testing.T) {
 	rec = get(t, mux, "/static/htmx.min.js")
 	requireStatus(t, rec, http.StatusOK)
 	requireContains(t, rec.Body.String(), "htmx")
+
+	rec = get(t, mux, "/static/quickadd-preview.js")
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "data-quick-add-preview")
+}
+
+func TestQuickAddPreviewControlsRenderBeforeSubmit(t *testing.T) {
+	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	mux := newTestMuxWithToday(newMemoryRepository(), today)
+
+	rec := get(t, mux, "/")
+	requireStatus(t, rec, http.StatusOK)
+
+	body := rec.Body.String()
+	requireContains(t, body, `<script src="/static/quickadd-preview.js" defer></script>`)
+	requireContains(t, body, `class="quick-add-preview" data-quick-add-preview data-today="2026-04-29" aria-live="polite" hidden`)
+	requireContains(t, body, `data-preview-task hidden`)
+	requireContains(t, body, `data-preview-due hidden`)
+	requireContains(t, body, `data-preview-category hidden`)
+	requireContains(t, body, `data-preview-priority hidden`)
+}
+
+func TestQuickAddPreviewControlsResetAfterAdd(t *testing.T) {
+	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	mux := newTestMuxWithToday(newMemoryRepository(), today)
+
+	rec := postForm(t, mux, "/add", url.Values{"text": {"Buy milk tomorrow"}})
+	requireStatus(t, rec, http.StatusOK)
+
+	body := rec.Body.String()
+	requireContains(t, body, `hx-swap-oob="outerHTML"`)
+	requireContains(t, body, `data-quick-add-preview data-today="2026-04-29"`)
 }
 
 func TestSecurityHeadersAreSet(t *testing.T) {
@@ -355,6 +387,111 @@ func TestTodoOrganizationFieldsLifecycle(t *testing.T) {
 	requireContains(t, rec.Body.String(), "Low priority")
 	requireContains(t, rec.Body.String(), "Share checklist after standup.")
 	requireNotContains(t, rec.Body.String(), "Confirm timeline with design.")
+}
+
+func TestQuickAddParsesTaskNameShortcuts(t *testing.T) {
+	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	mux := newTestMuxWithToday(newMemoryRepository(), today)
+
+	rec := postForm(t, mux, "/add", url.Values{
+		"text": {"File quarterly taxes @Finance p1 tomorrow"},
+	})
+	requireStatus(t, rec, http.StatusOK)
+
+	body := rec.Body.String()
+	requireContains(t, body, "File quarterly taxes")
+	requireContains(t, body, "Finance")
+	requireContains(t, body, "High priority")
+	requireContains(t, body, `datetime="2026-04-30"`)
+	requireContains(t, body, "Due 2026-04-30")
+	requireNotContains(t, body, "File quarterly taxes @Finance")
+	requireNotContains(t, body, "p1")
+}
+
+func TestQuickAddParsesSimpleDateShortcuts(t *testing.T) {
+	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	mux := newTestMuxWithToday(newMemoryRepository(), today)
+
+	rec := postForm(t, mux, "/add", url.Values{"text": {"Review metrics today"}})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "Review metrics")
+	requireContains(t, rec.Body.String(), "Due 2026-04-29")
+
+	rec = postForm(t, mux, "/add", url.Values{"text": {"Plan sprint next week"}})
+	requireStatus(t, rec, http.StatusOK)
+	requireContains(t, rec.Body.String(), "Plan sprint")
+	requireContains(t, rec.Body.String(), "Due 2026-05-06")
+}
+
+func TestQuickAddParsesNaturalLanguagePhrases(t *testing.T) {
+	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	mux := newTestMuxWithToday(newMemoryRepository(), today)
+
+	rec := postForm(t, mux, "/add", url.Values{
+		"text": {"Buy milk by tomorrow, high priority category groceries"},
+	})
+	requireStatus(t, rec, http.StatusOK)
+
+	body := rec.Body.String()
+	requireContains(t, body, "Buy milk")
+	requireContains(t, body, "groceries")
+	requireContains(t, body, "High priority")
+	requireContains(t, body, "Due 2026-04-30")
+	requireNotContains(t, body, "by tomorrow")
+	requireNotContains(t, body, "high priority")
+	requireNotContains(t, body, "category groceries")
+}
+
+func TestQuickAddParsesMultiWordCategories(t *testing.T) {
+	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	mux := newTestMuxWithToday(newMemoryRepository(), today)
+
+	rec := postForm(t, mux, "/add", url.Values{
+		"text": {"Clean pantry category home errands low priority next week"},
+	})
+	requireStatus(t, rec, http.StatusOK)
+
+	body := rec.Body.String()
+	requireContains(t, body, "Clean pantry")
+	requireContains(t, body, "home errands")
+	requireContains(t, body, "Low priority")
+	requireContains(t, body, "Due 2026-05-06")
+	requireNotContains(t, body, "category home errands")
+	requireNotContains(t, body, "low priority")
+	requireNotContains(t, body, "next week")
+}
+
+func TestQuickAddLeavesExplicitControlsInCharge(t *testing.T) {
+	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	mux := newTestMuxWithToday(newMemoryRepository(), today)
+
+	rec := postForm(t, mux, "/add", url.Values{
+		"text":     {"File taxes @Home p1 tomorrow"},
+		"category": {"Work"},
+		"priority": {"low"},
+		"due_date": {"2026-05-05"},
+	})
+	requireStatus(t, rec, http.StatusOK)
+
+	body := rec.Body.String()
+	requireContains(t, body, "File taxes")
+	requireContains(t, body, "Work")
+	requireContains(t, body, "Low priority")
+	requireContains(t, body, "Due 2026-05-05")
+	requireNotContains(t, body, "@Home")
+	requireNotContains(t, body, "p1")
+}
+
+func TestQuickAddRequiresTaskTextAfterShortcuts(t *testing.T) {
+	today := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	mux := newTestMuxWithToday(newMemoryRepository(), today)
+
+	rec := postForm(t, mux, "/add", url.Values{"text": {"@Work p1 tomorrow"}})
+	requireStatus(t, rec, http.StatusBadRequest)
+	requireContains(t, rec.Body.String(), "text is required")
+	if got := rec.Header().Get("HX-Retarget"); got != "#add-error" {
+		t.Fatalf("HX-Retarget = %q, want #add-error", got)
+	}
 }
 
 func TestTodoPriorityIsValidated(t *testing.T) {
